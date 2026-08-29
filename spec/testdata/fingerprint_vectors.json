@@ -1,0 +1,402 @@
+{
+  "algorithm": "iff-x402-requirement-fingerprint-v1",
+  "description": "Cross-language test vectors for the IFF x402 requirement fingerprint (spec doc: docs/TRANSPARENCY_LOG_PLAN.md, contract C1). option_fp = hex(sha256(\"iff-x402-option/v1\\n\" + canonical_json(option))); set_fp = hex(sha256(\"iff-x402-set/v1\\n\" + join(sort(unique(option_fp...)), \"\\n\"))). canonical_json has exactly the keys scheme, network, asset, pay_to, amount in that order, compact (no inserted whitespace), and must not HTML-escape '\u003c', '\u003e', '\u0026'. Normalization: scheme/network = TrimSpace then lowercase. asset/pay_to = lowercase only when the trimmed value matches ^0x[0-9a-fA-F]{40}$; otherwise TrimSpace only (base58 and other non-hex addresses stay case-sensitive). amount = TrimSpace, then strip leading zeros only when the trimmed value is purely ASCII decimal digits (\"000\" -\u003e \"0\"); otherwise the trimmed value is used as-is. max_timeout_seconds is never part of the hashed shape. Phase 2 (contract C4 rule 4b) adds payee_fingerprints/payee_set_fingerprint to every vector below: payee_fp = hex(sha256(\"iff-x402-payee/v1\\n\" + canonical_json({scheme,network,asset,pay_to}))) -- the same canonical_json and normalization rules as option_fp, but with the amount key omitted entirely and a different domain-separation prefix; payee_set_fp = hex(sha256(\"iff-x402-set/v1\\n\" + join(sort(unique(payee_fp...)), \"\\n\"))), reusing the exact same set-level domain prefix and aggregation as set_fp (safe because the option-level domain prefixes already differ, so a payee_fp can never collide with an option_fp for the same bytes). Two option sets that differ only in amount therefore always share a payee_set_fingerprint even though their set_fingerprint differs -- see payee_fingerprint_shared_across_amount_a/b.",
+  "vectors": [
+    {
+      "name": "single_option_basic",
+      "notes": "Baseline single EVM option; the reference value every case/whitespace/duplicate variant below must match.",
+      "options": [
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0xab12cd34ab12cd34ab12cd34ab12cd34ab12cd34",
+          "amount": "1000000",
+          "pay_to": "0xef56ab78ef56ab78ef56ab78ef56ab78ef56ab78",
+          "max_timeout_seconds": 60
+        }
+      ],
+      "ok": true,
+      "set_fingerprint": "91639af6f1dc968c3506c117712fc7830368e7cad3e2dd7cebe209cbb4f229ea",
+      "option_fingerprints": [
+        "368387837e4883346a4479ec48d19718b432b70f7185c77b4a2150a07d61c768"
+      ],
+      "payee_fingerprints": [
+        "0b105a320c5835f8026d49a9c7d3d725ffbab612671f12aa7aac2df52197528c"
+      ],
+      "payee_set_fingerprint": "132e47fbe045da7a101b2dcd54d999339fcc1a57d52af51573c0c87b466aff97",
+      "fingerprint_version": 1
+    },
+    {
+      "name": "single_option_case_and_whitespace_insensitive",
+      "notes": "Same option as single_option_basic but scheme/network/asset/pay_to have mixed case and surrounding whitespace, and max_timeout_seconds differs. Must equal single_option_basic's set_fingerprint (hex addresses are case-insensitive; max_timeout_seconds is not hashed).",
+      "options": [
+        {
+          "scheme": " Exact ",
+          "network": " EIP155:8453 ",
+          "asset": "0xAB12CD34AB12CD34AB12CD34AB12CD34AB12CD34",
+          "amount": " 1000000 ",
+          "pay_to": "0xEF56AB78EF56AB78EF56AB78EF56AB78EF56AB78",
+          "max_timeout_seconds": 90
+        }
+      ],
+      "ok": true,
+      "set_fingerprint": "91639af6f1dc968c3506c117712fc7830368e7cad3e2dd7cebe209cbb4f229ea",
+      "option_fingerprints": [
+        "368387837e4883346a4479ec48d19718b432b70f7185c77b4a2150a07d61c768"
+      ],
+      "payee_fingerprints": [
+        "0b105a320c5835f8026d49a9c7d3d725ffbab612671f12aa7aac2df52197528c"
+      ],
+      "payee_set_fingerprint": "132e47fbe045da7a101b2dcd54d999339fcc1a57d52af51573c0c87b466aff97",
+      "fingerprint_version": 1
+    },
+    {
+      "name": "duplicate_options_collapse",
+      "notes": "single_option_basic's option listed twice, the second time in its case/whitespace variant form. Must collapse to exactly one entry in option_fingerprints and match single_option_basic's set_fingerprint.",
+      "options": [
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0xab12cd34ab12cd34ab12cd34ab12cd34ab12cd34",
+          "amount": "1000000",
+          "pay_to": "0xef56ab78ef56ab78ef56ab78ef56ab78ef56ab78",
+          "max_timeout_seconds": 60
+        },
+        {
+          "scheme": " Exact ",
+          "network": " EIP155:8453 ",
+          "asset": "0xAB12CD34AB12CD34AB12CD34AB12CD34AB12CD34",
+          "amount": " 1000000 ",
+          "pay_to": "0xEF56AB78EF56AB78EF56AB78EF56AB78EF56AB78",
+          "max_timeout_seconds": 90
+        }
+      ],
+      "ok": true,
+      "set_fingerprint": "91639af6f1dc968c3506c117712fc7830368e7cad3e2dd7cebe209cbb4f229ea",
+      "option_fingerprints": [
+        "368387837e4883346a4479ec48d19718b432b70f7185c77b4a2150a07d61c768"
+      ],
+      "payee_fingerprints": [
+        "0b105a320c5835f8026d49a9c7d3d725ffbab612671f12aa7aac2df52197528c"
+      ],
+      "payee_set_fingerprint": "132e47fbe045da7a101b2dcd54d999339fcc1a57d52af51573c0c87b466aff97",
+      "fingerprint_version": 1
+    },
+    {
+      "name": "amount_leading_zeros",
+      "notes": "amount \"0000456\" must normalize the same as amount \"456\" (see amount_leading_zeros_equivalent).",
+      "options": [
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0xab12cd34ab12cd34ab12cd34ab12cd34ab12cd34",
+          "amount": "0000456",
+          "pay_to": "0xef56ab78ef56ab78ef56ab78ef56ab78ef56ab78",
+          "max_timeout_seconds": 60
+        }
+      ],
+      "ok": true,
+      "set_fingerprint": "64185dbb262f1158a0e6bd37187ace8a1716d93d91621b939155476e565e77a7",
+      "option_fingerprints": [
+        "d63f023a15e009a65394b21eaeac50486f0adfcf3ca9542387730a21c678f00a"
+      ],
+      "payee_fingerprints": [
+        "0b105a320c5835f8026d49a9c7d3d725ffbab612671f12aa7aac2df52197528c"
+      ],
+      "payee_set_fingerprint": "132e47fbe045da7a101b2dcd54d999339fcc1a57d52af51573c0c87b466aff97",
+      "fingerprint_version": 1
+    },
+    {
+      "name": "amount_leading_zeros_equivalent",
+      "notes": "amount \"456\" with no leading zeros. Must equal amount_leading_zeros's set_fingerprint.",
+      "options": [
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0xab12cd34ab12cd34ab12cd34ab12cd34ab12cd34",
+          "amount": "456",
+          "pay_to": "0xef56ab78ef56ab78ef56ab78ef56ab78ef56ab78",
+          "max_timeout_seconds": 60
+        }
+      ],
+      "ok": true,
+      "set_fingerprint": "64185dbb262f1158a0e6bd37187ace8a1716d93d91621b939155476e565e77a7",
+      "option_fingerprints": [
+        "d63f023a15e009a65394b21eaeac50486f0adfcf3ca9542387730a21c678f00a"
+      ],
+      "payee_fingerprints": [
+        "0b105a320c5835f8026d49a9c7d3d725ffbab612671f12aa7aac2df52197528c"
+      ],
+      "payee_set_fingerprint": "132e47fbe045da7a101b2dcd54d999339fcc1a57d52af51573c0c87b466aff97",
+      "fingerprint_version": 1
+    },
+    {
+      "name": "amount_all_zeros_normalizes_to_zero",
+      "notes": "amount \"000\" must normalize to \"0\", not the empty string.",
+      "options": [
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0xab12cd34ab12cd34ab12cd34ab12cd34ab12cd34",
+          "amount": "000",
+          "pay_to": "0xef56ab78ef56ab78ef56ab78ef56ab78ef56ab78",
+          "max_timeout_seconds": 60
+        }
+      ],
+      "ok": true,
+      "set_fingerprint": "2d601f609a3d87e5f96fcbb4faec32dd68150eccafd740c8b49d4ce73b701d06",
+      "option_fingerprints": [
+        "97274d92ee7de0ea0c93a79e9dcd56f3e0263f64f9ea49e3bd398d5e337be3d4"
+      ],
+      "payee_fingerprints": [
+        "0b105a320c5835f8026d49a9c7d3d725ffbab612671f12aa7aac2df52197528c"
+      ],
+      "payee_set_fingerprint": "132e47fbe045da7a101b2dcd54d999339fcc1a57d52af51573c0c87b466aff97",
+      "fingerprint_version": 1
+    },
+    {
+      "name": "amount_non_decimal_passthrough",
+      "notes": "amount \" 1.50 \" is not purely decimal digits, so only TrimSpace applies (no digit stripping): normalizes to \"1.50\".",
+      "options": [
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0xab12cd34ab12cd34ab12cd34ab12cd34ab12cd34",
+          "amount": " 1.50 ",
+          "pay_to": "0xef56ab78ef56ab78ef56ab78ef56ab78ef56ab78",
+          "max_timeout_seconds": 60
+        }
+      ],
+      "ok": true,
+      "set_fingerprint": "7034d4bbc61d40f50a4d3282d8856d633eb683cf01f5ccfc081b76bbcf140bc2",
+      "option_fingerprints": [
+        "3724f3cadaa32f044a8953e8fd2b171a9cfe34cc27a493d424b1284291a0c711"
+      ],
+      "payee_fingerprints": [
+        "0b105a320c5835f8026d49a9c7d3d725ffbab612671f12aa7aac2df52197528c"
+      ],
+      "payee_set_fingerprint": "132e47fbe045da7a101b2dcd54d999339fcc1a57d52af51573c0c87b466aff97",
+      "fingerprint_version": 1
+    },
+    {
+      "name": "multi_option_order_ab",
+      "notes": "Two distinct options (different network/amount/max_timeout_seconds) in order [A, B].",
+      "options": [
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0xab12cd34ab12cd34ab12cd34ab12cd34ab12cd34",
+          "amount": "500000",
+          "pay_to": "0xef56ab78ef56ab78ef56ab78ef56ab78ef56ab78",
+          "max_timeout_seconds": 60
+        },
+        {
+          "scheme": "exact",
+          "network": "eip155:84532",
+          "asset": "0xab12cd34ab12cd34ab12cd34ab12cd34ab12cd34",
+          "amount": "750000",
+          "pay_to": "0xef56ab78ef56ab78ef56ab78ef56ab78ef56ab78",
+          "max_timeout_seconds": 120
+        }
+      ],
+      "ok": true,
+      "set_fingerprint": "5cdb30096e6d8e8cad474eac2dbc8b50e6d043782d731c8947b6402a88996d53",
+      "option_fingerprints": [
+        "03919deba7ff08a6611fe2b3fea59c5ed5d06bbb72890dd88532455a615ffeac",
+        "21cd7683664370d2267a56e70850cdb3acf14379ace46497ce1f20ab72140983"
+      ],
+      "payee_fingerprints": [
+        "0b105a320c5835f8026d49a9c7d3d725ffbab612671f12aa7aac2df52197528c",
+        "90fb3dd9ad67a88a30b54f015aee1b4676832b338b9417312d0322e26bea655d"
+      ],
+      "payee_set_fingerprint": "67591d405d1e22565df1edcf0a8d17758a25e071a29a7de2101c5977036227a0",
+      "fingerprint_version": 1
+    },
+    {
+      "name": "multi_option_order_ba",
+      "notes": "The same two distinct options as multi_option_order_ab, submitted in order [B, A]. Must produce an identical set_fingerprint and an identically ordered option_fingerprints array (sorted independent of input order).",
+      "options": [
+        {
+          "scheme": "exact",
+          "network": "eip155:84532",
+          "asset": "0xab12cd34ab12cd34ab12cd34ab12cd34ab12cd34",
+          "amount": "750000",
+          "pay_to": "0xef56ab78ef56ab78ef56ab78ef56ab78ef56ab78",
+          "max_timeout_seconds": 120
+        },
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0xab12cd34ab12cd34ab12cd34ab12cd34ab12cd34",
+          "amount": "500000",
+          "pay_to": "0xef56ab78ef56ab78ef56ab78ef56ab78ef56ab78",
+          "max_timeout_seconds": 60
+        }
+      ],
+      "ok": true,
+      "set_fingerprint": "5cdb30096e6d8e8cad474eac2dbc8b50e6d043782d731c8947b6402a88996d53",
+      "option_fingerprints": [
+        "03919deba7ff08a6611fe2b3fea59c5ed5d06bbb72890dd88532455a615ffeac",
+        "21cd7683664370d2267a56e70850cdb3acf14379ace46497ce1f20ab72140983"
+      ],
+      "payee_fingerprints": [
+        "0b105a320c5835f8026d49a9c7d3d725ffbab612671f12aa7aac2df52197528c",
+        "90fb3dd9ad67a88a30b54f015aee1b4676832b338b9417312d0322e26bea655d"
+      ],
+      "payee_set_fingerprint": "67591d405d1e22565df1edcf0a8d17758a25e071a29a7de2101c5977036227a0",
+      "fingerprint_version": 1
+    },
+    {
+      "name": "base58_pay_to_case_sensitive",
+      "notes": "A non-hex (base58-style) pay_to/asset address in mixed case. Baseline for the case-sensitivity check below.",
+      "options": [
+        {
+          "scheme": "exact",
+          "network": "solana:mainnet",
+          "asset": "GjKq7ozGVjuxN4nBEZuLp8LzXKrjhq96CvYHRAg3Fv1w",
+          "amount": "250000",
+          "pay_to": "GjKq7ozGVjuxN4nBEZuLp8LzXKrjhq96CvYHRAg3Fv1w",
+          "max_timeout_seconds": 60
+        }
+      ],
+      "ok": true,
+      "set_fingerprint": "963b85f1115d9641a9a567a7f2481781ce09f1366a7c1b0be833e6bc579ee86d",
+      "option_fingerprints": [
+        "638a0c6188997c40d68b91ae7f8c407a37034512d70a281fa4205f1f9e7bee92"
+      ],
+      "payee_fingerprints": [
+        "2c6ce5d1714dfe14cc8e9bb923ee4c6720d718d0839c190b3c8ef8c1f1bc9b0f"
+      ],
+      "payee_set_fingerprint": "69ebac8410a953ba97aaf9e8b2a88055c7e648a9fec9ca3f3e5716564efc5fc3",
+      "fingerprint_version": 1
+    },
+    {
+      "name": "base58_pay_to_case_changed_differs",
+      "notes": "Same as base58_pay_to_case_sensitive but asset/pay_to are lowercased. Unlike hex addresses, base58 is case-sensitive, so this MUST NOT equal base58_pay_to_case_sensitive's set_fingerprint (nor its payee_set_fingerprint: the payee identity is case-sensitive too).",
+      "options": [
+        {
+          "scheme": "exact",
+          "network": "solana:mainnet",
+          "asset": "gjkq7ozgvjuxn4nbezulp8lzxkrjhq96cvyhrag3fv1w",
+          "amount": "250000",
+          "pay_to": "gjkq7ozgvjuxn4nbezulp8lzxkrjhq96cvyhrag3fv1w",
+          "max_timeout_seconds": 60
+        }
+      ],
+      "ok": true,
+      "set_fingerprint": "c9c1164457c97de349f772b9ba668c9455bdec727b0f939b2a634d4f828dd468",
+      "option_fingerprints": [
+        "d6ed1d0ae616ea322297b7c7995fce94f364b2669dfe61839041f13024b57898"
+      ],
+      "payee_fingerprints": [
+        "2fd2e98560f6225a00bafcaab16a03af4c4546d78914dd07341e9bda0878b4f4"
+      ],
+      "payee_set_fingerprint": "d74fc69e03ec864a6c89e86969041d2406ed2b82ce647dc7e8eb4e658e8bcf0b",
+      "fingerprint_version": 1
+    },
+    {
+      "name": "max_timeout_seconds_excluded_60",
+      "notes": "max_timeout_seconds=60; everything else identical to max_timeout_seconds_excluded_600.",
+      "options": [
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0xab12cd34ab12cd34ab12cd34ab12cd34ab12cd34",
+          "amount": "42",
+          "pay_to": "0xef56ab78ef56ab78ef56ab78ef56ab78ef56ab78",
+          "max_timeout_seconds": 60
+        }
+      ],
+      "ok": true,
+      "set_fingerprint": "9f3601a5886acd3ba70954be3be9ea8d2d3e8cfb777b87c83da218fe0cb65055",
+      "option_fingerprints": [
+        "e7bae33dfa4ad7a9cbfeda7500205d435fa86bb83c442af3ffb96d2719919304"
+      ],
+      "payee_fingerprints": [
+        "0b105a320c5835f8026d49a9c7d3d725ffbab612671f12aa7aac2df52197528c"
+      ],
+      "payee_set_fingerprint": "132e47fbe045da7a101b2dcd54d999339fcc1a57d52af51573c0c87b466aff97",
+      "fingerprint_version": 1
+    },
+    {
+      "name": "max_timeout_seconds_excluded_600",
+      "notes": "max_timeout_seconds=600 with all other fields identical to max_timeout_seconds_excluded_60. Must produce the SAME set_fingerprint: max_timeout_seconds is an operational parameter (D12) and is never hashed.",
+      "options": [
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0xab12cd34ab12cd34ab12cd34ab12cd34ab12cd34",
+          "amount": "42",
+          "pay_to": "0xef56ab78ef56ab78ef56ab78ef56ab78ef56ab78",
+          "max_timeout_seconds": 600
+        }
+      ],
+      "ok": true,
+      "set_fingerprint": "9f3601a5886acd3ba70954be3be9ea8d2d3e8cfb777b87c83da218fe0cb65055",
+      "option_fingerprints": [
+        "e7bae33dfa4ad7a9cbfeda7500205d435fa86bb83c442af3ffb96d2719919304"
+      ],
+      "payee_fingerprints": [
+        "0b105a320c5835f8026d49a9c7d3d725ffbab612671f12aa7aac2df52197528c"
+      ],
+      "payee_set_fingerprint": "132e47fbe045da7a101b2dcd54d999339fcc1a57d52af51573c0c87b466aff97",
+      "fingerprint_version": 1
+    },
+    {
+      "name": "payee_fingerprint_shared_across_amount_a",
+      "notes": "Phase 2 (C4 rule 4b): identical scheme/network/asset/pay_to to single_option_basic, amount=\"1\". set_fingerprint/option_fingerprints MUST differ from single_option_basic (amount is part of the ordinary fingerprint) but payee_fingerprints/payee_set_fingerprint MUST equal single_option_basic's (and payee_fingerprint_shared_across_amount_b's): payee identity excludes amount.",
+      "options": [
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0xab12cd34ab12cd34ab12cd34ab12cd34ab12cd34",
+          "amount": "1",
+          "pay_to": "0xef56ab78ef56ab78ef56ab78ef56ab78ef56ab78",
+          "max_timeout_seconds": 60
+        }
+      ],
+      "ok": true,
+      "set_fingerprint": "3eaa7cd42b96f00533aecca9890119ef3cee52d4809920f0ed7fa8cd18158e35",
+      "option_fingerprints": [
+        "743ea846423c1e9a2c9487fac86de12f988b7e237ea6ba1a29ea350c8348202f"
+      ],
+      "payee_fingerprints": [
+        "0b105a320c5835f8026d49a9c7d3d725ffbab612671f12aa7aac2df52197528c"
+      ],
+      "payee_set_fingerprint": "132e47fbe045da7a101b2dcd54d999339fcc1a57d52af51573c0c87b466aff97",
+      "fingerprint_version": 1
+    },
+    {
+      "name": "payee_fingerprint_shared_across_amount_b",
+      "notes": "Phase 2 (C4 rule 4b): same payee (scheme/network/asset/pay_to) as payee_fingerprint_shared_across_amount_a and single_option_basic, but amount=\"999999999\" -- a large, differently-shaped decimal string. set_fingerprint/option_fingerprints differ from both; payee_fingerprints/payee_set_fingerprint match both.",
+      "options": [
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0xab12cd34ab12cd34ab12cd34ab12cd34ab12cd34",
+          "amount": "999999999",
+          "pay_to": "0xef56ab78ef56ab78ef56ab78ef56ab78ef56ab78",
+          "max_timeout_seconds": 60
+        }
+      ],
+      "ok": true,
+      "set_fingerprint": "d0d9961136c255b9c1a6510232dbb22aea149e7dc7784c23225b0a6ca5292bfa",
+      "option_fingerprints": [
+        "a62d9b7c0dbcdfc4617a41d8c026e8fe3a984e74ecdedb16bf66ca4d36b0bd68"
+      ],
+      "payee_fingerprints": [
+        "0b105a320c5835f8026d49a9c7d3d725ffbab612671f12aa7aac2df52197528c"
+      ],
+      "payee_set_fingerprint": "132e47fbe045da7a101b2dcd54d999339fcc1a57d52af51573c0c87b466aff97",
+      "fingerprint_version": 1
+    },
+    {
+      "name": "empty_set",
+      "notes": "No payment options at all. ComputeFingerprint and ComputePayeeFingerprint must both return ok=false and must not be recorded as a fingerprint row.",
+      "options": [],
+      "ok": false,
+      "option_fingerprints": [],
+      "payee_fingerprints": []
+    }
+  ]
+}

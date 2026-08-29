@@ -1,0 +1,79 @@
+{
+  "description": "Worked example for spec/x402-requirement-transparency-v1.md. Leaves are SHA-256(\"iff-log-vector-leaf-\" || decimal index), RFC 6962 leaf/node hashed. inclusion_proof is the audit path for leaves[log_index] against tree_size. consistency_proof proves the tree at `second` is an append-only extension of the tree at `first` (first_root_hash is that earlier root, included so a verifier does not need to recompute it). signed_tree_head is signed with test_private_key_seed_base64 (a published, non-secret Ed25519 seed used only for this vector) at a fixed timestamp.",
+  "test_private_key_seed_base64": "sK7iZeerLXZ6bgq6EKUTss541HL4SyUu7UxmVj9fClM=",
+  "test_private_key_seed_warning": "This key is intentionally public. Never anchor trust in an STH signed by this key.",
+  "leaves": [
+    {
+      "index": 0,
+      "report_hash": "300913b18167fe23d6d20989de061b6711e5828b63fdbf30cb0fa6ebff167f5f",
+      "leaf_hash": "682268059b9d4007121961d90c5319412f159fecce0ed5ac0d9e5dd4b47278f6"
+    },
+    {
+      "index": 1,
+      "report_hash": "6dba8da8ea795f720013a1bac48877ce6256665a8ea8cf65f6fd7856752011d0",
+      "leaf_hash": "f9c8fdad539c46fe73238e0113925f253a24ccfad5d0e5cba55a94189b5c845b"
+    },
+    {
+      "index": 2,
+      "report_hash": "af52be99cfea49c7175f1d43403122751fad0344a14c96e564facb8d1b86f134",
+      "leaf_hash": "5ec495421d81813a6119d2b2073d381e7a158be8aaf68592151f78dc4c59ab8b"
+    },
+    {
+      "index": 3,
+      "report_hash": "ca4eaa275c54274f7193b546f1bb30cb6802229f93d8d3082d7b96bc79fceba5",
+      "leaf_hash": "6f87b2f77d4491fef9e4cbbbd5a244fd2dd834829c990a71480bc03129bb55af"
+    },
+    {
+      "index": 4,
+      "report_hash": "eb1f7745bd99a5c7e439e55d06042c76f0e331fe36408014cf54e5068d5e6261",
+      "leaf_hash": "0b6e29228a103cc59db22f30c477a30a3ed2e4fb8fc83a6eaf8049c09ec76055"
+    },
+    {
+      "index": 5,
+      "report_hash": "634ab955a31391929d7b38b92cc32e0928148f163d1b3d4d2aceefb8aa3f1b15",
+      "leaf_hash": "3439e1d1fbbe350a9b2bbf7546312485de89f33f2fe176ac4a0d9cdcf78e8747"
+    },
+    {
+      "index": 6,
+      "report_hash": "6bec4a9e409834d2605d0c717eb6daf27a2a1740ca133c83d013bcacdd3868ec",
+      "leaf_hash": "327242b4a3a68cac6408903652ef3268e513d9dbe81fc38a51730def2ce86ecf"
+    },
+    {
+      "index": 7,
+      "report_hash": "86ba72ccac2497e031b6046e385b2d6cabdfba7f71cca4af61d2957379c52f4a",
+      "leaf_hash": "56f91a6559eb04c3ec6c78befc61e556d660e260448d4af6a9811331dadfd099"
+    }
+  ],
+  "tree_size": 8,
+  "root_hash": "c6f684ce14d150072e8237a2d0183d75c6681088c406914e684fb0ba8b6eb8fb",
+  "inclusion_proof": {
+    "log_index": 5,
+    "tree_size": 8,
+    "audit_path": [
+      "0b6e29228a103cc59db22f30c477a30a3ed2e4fb8fc83a6eaf8049c09ec76055",
+      "2148052500a5caca1f56df5f3fd70b12b95b0575f94a70f59e2b8e0197bd8d95",
+      "dcc256eb8f51195a2e9ccc6a494899986583144fe7f072451ef6d41e486b952d"
+    ]
+  },
+  "consistency_proof": {
+    "first": 6,
+    "second": 8,
+    "first_root_hash": "24eda9fd8af608f79b1627784f4f785b963b13383b840c247f948915e6726200",
+    "proof": [
+      "1d846e044f3af9fc3832bbb55e68463de4b5fcb6451e6faaf6022778be33a8be",
+      "2148052500a5caca1f56df5f3fd70b12b95b0575f94a70f59e2b8e0197bd8d95",
+      "dcc256eb8f51195a2e9ccc6a494899986583144fe7f072451ef6d41e486b952d"
+    ]
+  },
+  "signed_tree_head": {
+    "log_id": "7eb8000c99b6e474b553fa38757d76fa",
+    "tree_size": 8,
+    "timestamp": "2026-08-29T00:00:00.000000Z",
+    "root_hash": "c6f684ce14d150072e8237a2d0183d75c6681088c406914e684fb0ba8b6eb8fb",
+    "sth_body": "{\"log_id\":\"7eb8000c99b6e474b553fa38757d76fa\",\"tree_size\":8,\"timestamp\":\"2026-08-29T00:00:00.000000Z\",\"root_hash\":\"c6f684ce14d150072e8237a2d0183d75c6681088c406914e684fb0ba8b6eb8fb\"}",
+    "sha256_hash": "f720c1d3e30681e46da027da6bbb4c5d266d4a6afae1ad832da29caa82187258",
+    "keccak256_hash": "12314ff68e605937ac9d81a0ae4060813994fa77913f67c9dd0d748921d203de",
+    "signature": "ASqpoBb0g7yhGs67shDLiqwxE6NRA6sFuq8zyxDzgMrryFcfHl2XwLihFni7L5nmj2PkSAPBgJkyo3R3X7dCCA==",
+    "public_key": "ht9fpmqvRbHgSrmjfsMW11y1h0Lsy4aRFT5rQImgTKg="
+  }
+}
