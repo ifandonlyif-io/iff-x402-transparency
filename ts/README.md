@@ -95,4 +95,4 @@ the wire protocol directly.
 
 ## Support
 
-Questions and security reports: support@ifandonlyif.io
+Questions and security reports: ben@tokimi.space
