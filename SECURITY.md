@@ -1,6 +1,6 @@
 # Security policy
 
-Please report vulnerabilities privately to `support@ifandonlyif.io`.
+Please report vulnerabilities privately to `ben@tokimi.space`.
 
 Do not open a public issue for a suspected key compromise, proof-verification
 bypass, canonicalization mismatch, SSRF issue, leaked credential, or an
