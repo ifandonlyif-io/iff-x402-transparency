@@ -5,8 +5,7 @@ transparency log: protocol specification, known-answer vectors, a pinned-key
 reference verifier, and TypeScript and Go clients.
 
 The goal is narrow and testable: let an independent reader verify published
-log outputs without relying on undocumented server logic. This repository is
-not a claim that IFF's production runtime is remotely attested.
+log outputs without relying on undocumented server logic.
 
 ## What's here
 
@@ -52,7 +51,7 @@ historical checkpoints and adds the successor through a trusted channel.
 
 | Claim | Public evidence | Limitation |
 |---|---|---|
-| Requirement fingerprints follow v1 | Spec, vectors, and the canonical Go implementation used by production | Source publication is not runtime attestation |
+| Requirement fingerprints follow v1 | Spec, vectors, and the canonical Go implementation used by production | Published source alone does not identify the binary running on the server |
 | An STH came from IFF's pinned log key | Canonical bytes, signature, and pinned key fingerprint | A rotation needs a separately trusted update |
 | An observation is included in a snapshot | Recomputed root and RFC 6962 inclusion proof | Inclusion does not prove the observation is factually correct |
 | History advanced append-only | A retained STH and consistency proof | One observer cannot exclude every split view; independent witnesses improve this |
@@ -60,14 +59,14 @@ historical checkpoints and adds the successor through a trusted channel.
 
 The supported statement is: **the monitor's trust-critical outputs are
 independently verifiable, and its canonical fingerprint implementation is
-publicly auditable.** This repository does not claim TEE execution, remote
-attestation, payment safety, endpoint honesty, or a composite trust score.
+publicly auditable.** It does not turn those observations into claims of
+payment safety, endpoint honesty, or a composite trust score.
 
 The first release does not yet expose the GET-only probing and public-card
 policy implementation. Those source slices are planned next so auditors can
 review manual-probe exclusion, D6 field allowlisting, SSRF policy, tier and
-verdict rules, opt-out, and discovery attribution. Even then, public source
-will remain auditability—not runtime attestation.
+verdict rules, opt-out, and discovery attribution. Public source remains the
+basis for independent auditability.
 
 ## Development
 
