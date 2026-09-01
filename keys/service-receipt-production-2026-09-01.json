@@ -1,0 +1,14 @@
+{
+  "schema": "https://ifandonlyif.io/schemas/service-receipt-key-directory-v1.json",
+  "issuer": "https://ifandonlyif.io",
+  "enabled": true,
+  "keys": [
+    {
+      "key_id": "sha256:0f872f79cd935ac2d764589c8283d35ae0ca02780faebee8862db85348fc5ceb",
+      "algorithm": "Ed25519",
+      "public_key": "iVnUmYYy_PO_M3wFYWwc91wxVPU6VRyEcPr9iC4F230",
+      "purpose": "service-receipt-signing",
+      "status": "current"
+    }
+  ]
+}

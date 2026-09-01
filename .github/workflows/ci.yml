@@ -38,6 +38,7 @@ jobs:
           python3 -m json.tool schemas/service-receipt-v1.json >/dev/null
           python3 -m json.tool schemas/service-receipt-key-directory-v1.json >/dev/null
           python3 -m json.tool spec/testdata/service_receipt_v1.json >/dev/null
+          python3 -m json.tool keys/service-receipt-production-2026-09-01.json >/dev/null
 
       - name: Test browser receipt verifier core
         run: node --test browser/service-receipt.test.mjs

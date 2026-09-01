@@ -85,6 +85,23 @@ command.
 The receipt key directory is useful origin metadata when fetched from the
 exact expected HTTPS issuer. It is not an independently pinned trust anchor.
 
+The version-controlled production pin first published on 2026-09-01 is archived at
+[`keys/service-receipt-production-2026-09-01.json`](keys/service-receipt-production-2026-09-01.json):
+
+- issuer: `https://ifandonlyif.io`
+- full key ID:
+  `sha256:0f872f79cd935ac2d764589c8283d35ae0ca02780faebee8862db85348fc5ceb`
+
+Use the issuer and full key ID together. The dated file is a versioned release
+snapshot distributed through this protected repository; the live key
+directory remains mutable discovery metadata. Rotation adds a new versioned
+snapshot and retains this one so historical receipts keep their original pin.
+Its `current` status means current when that dated snapshot was published; an
+old snapshot can support historical verification but MUST NOT automatically
+authorize newly issued receipts forever. Publish the successor first, overlap
+the predecessor for the receipt lifetime plus directory-cache lifetime, then
+mark the predecessor historical/inactive in the next versioned snapshot.
+
 ## What this proves—and what it doesn't
 
 | Claim | Public evidence | Limitation |
