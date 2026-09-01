@@ -1,0 +1,110 @@
+{
+  "description": "Known-answer material for IFF Service Receipt v1. Construct envelope.payload as unpadded base64url of valid.canonical_payload.",
+  "test_private_key_seed_base64": "sK7iZeerLXZ6bgq6EKUTss541HL4SyUu7UxmVj9fClM=",
+  "test_private_key_seed_warning": "This key is intentionally public. Never trust a receipt because it uses this key.",
+  "domains": {
+    "signature": "iff-service-receipt/v1\n",
+    "request_hash": "iff-service-receipt/request/v1\n",
+    "subject_hash": "iff-service-receipt/subject/v1\n"
+  },
+  "canonical_request": "{\"url\":\"https://api.example.com/paid\",\"received\":{\"set_fingerprint\":\"1111111111111111111111111111111111111111111111111111111111111111\",\"option_fingerprints\":[]}}",
+  "canonical_subject": "{\"url\":\"https://api.example.com/paid\",\"verdict\":\"unobserved\",\"received\":{\"set_fingerprint\":\"1111111111111111111111111111111111111111111111111111111111111111\",\"option_fingerprints\":[]},\"history\":[],\"unmatched_received_options\":[],\"ownership\":{\"status\":\"unverified\"},\"known\":false,\"inclusion\":null,\"disclaimer\":\"Consistency with independent observation only. Not a safety, delivery, or payment guarantee.\"}",
+  "valid": {
+    "canonical_payload": "{\"schema\":\"https://ifandonlyif.io/schemas/service-receipt-v1.json\",\"receipt_id\":\"sr1_AAECAwQFBgcICQoLDA0ODxAR\",\"issuer\":\"https://ifandonlyif.io\",\"service\":\"x402-requirement-verification\",\"issued_at\":\"2026-09-01T03:04:05.000000Z\",\"expires_at\":\"2026-09-01T03:09:05.000000Z\",\"nonce\":\"checkout_7f3a\",\"request_sha256\":\"f5bbcb9841e70ee5c034dc11ab33b07b508dea8b4bd7325e1086402e0afb6976\",\"subject_media_type\":\"application/json\",\"subject_sha256\":\"935efccdb810c40bddfa8207681441d39faec0cd40a00671e49e2038dc184ec6\",\"subject\":\"eyJ1cmwiOiJodHRwczovL2FwaS5leGFtcGxlLmNvbS9wYWlkIiwidmVyZGljdCI6InVub2JzZXJ2ZWQiLCJyZWNlaXZlZCI6eyJzZXRfZmluZ2VycHJpbnQiOiIxMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExIiwib3B0aW9uX2ZpbmdlcnByaW50cyI6W119LCJoaXN0b3J5IjpbXSwidW5tYXRjaGVkX3JlY2VpdmVkX29wdGlvbnMiOltdLCJvd25lcnNoaXAiOnsic3RhdHVzIjoidW52ZXJpZmllZCJ9LCJrbm93biI6ZmFsc2UsImluY2x1c2lvbiI6bnVsbCwiZGlzY2xhaW1lciI6IkNvbnNpc3RlbmN5IHdpdGggaW5kZXBlbmRlbnQgb2JzZXJ2YXRpb24gb25seS4gTm90IGEgc2FmZXR5LCBkZWxpdmVyeSwgb3IgcGF5bWVudCBndWFyYW50ZWUuIn0\",\"evidence\":null,\"compute_proof\":null}",
+    "payload_sha256": "ba045387069904a105c39c28507990c91a25a79191d97a896e65af874002357a",
+    "signing_digest_sha256": "72fd87dae3dd0c23515316161668799f616c5a0d5a8f200c6d438928b4c71fb4",
+    "key_id": "sha256:7eb8000c99b6e474b553fa38757d76fabf5f527e885dbfd5b373acc0366bff85",
+    "public_key_base64url": "ht9fpmqvRbHgSrmjfsMW11y1h0Lsy4aRFT5rQImgTKg",
+    "signature_base64url": "r3oo-d94YN0EAxBdWrQwwL-r3gvL1rL4f3hGHWvgN2Y-riLNP6Yvvyw28Yc3u0uI_o43VETaLEQMx63L0305Bw",
+    "envelope": {
+      "schema": "https://ifandonlyif.io/schemas/service-receipt-v1.json",
+      "payload": "eyJzY2hlbWEiOiJodHRwczovL2lmYW5kb25seWlmLmlvL3NjaGVtYXMvc2VydmljZS1yZWNlaXB0LXYxLmpzb24iLCJyZWNlaXB0X2lkIjoic3IxX0FBRUNBd1FGQmdjSUNRb0xEQTBPRHhBUiIsImlzc3VlciI6Imh0dHBzOi8vaWZhbmRvbmx5aWYuaW8iLCJzZXJ2aWNlIjoieDQwMi1yZXF1aXJlbWVudC12ZXJpZmljYXRpb24iLCJpc3N1ZWRfYXQiOiIyMDI2LTA5LTAxVDAzOjA0OjA1LjAwMDAwMFoiLCJleHBpcmVzX2F0IjoiMjAyNi0wOS0wMVQwMzowOTowNS4wMDAwMDBaIiwibm9uY2UiOiJjaGVja291dF83ZjNhIiwicmVxdWVzdF9zaGEyNTYiOiJmNWJiY2I5ODQxZTcwZWU1YzAzNGRjMTFhYjMzYjA3YjUwOGRlYThiNGJkNzMyNWUxMDg2NDAyZTBhZmI2OTc2Iiwic3ViamVjdF9tZWRpYV90eXBlIjoiYXBwbGljYXRpb24vanNvbiIsInN1YmplY3Rfc2hhMjU2IjoiOTM1ZWZjY2RiODEwYzQwYmRkZmE4MjA3NjgxNDQxZDM5ZmFlYzBjZDQwYTAwNjcxZTQ5ZTIwMzhkYzE4NGVjNiIsInN1YmplY3QiOiJleUoxY213aU9pSm9kSFJ3Y3pvdkwyRndhUzVsZUdGdGNHeGxMbU52YlM5d1lXbGtJaXdpZG1WeVpHbGpkQ0k2SW5WdWIySnpaWEoyWldRaUxDSnlaV05sYVhabFpDSTZleUp6WlhSZlptbHVaMlZ5Y0hKcGJuUWlPaUl4TVRFeE1URXhNVEV4TVRFeE1URXhNVEV4TVRFeE1URXhNVEV4TVRFeE1URXhNVEV4TVRFeE1URXhNVEV4TVRFeE1URXhNVEV4TVRFeE1URXhNVEV4SWl3aWIzQjBhVzl1WDJacGJtZGxjbkJ5YVc1MGN5STZXMTE5TENKb2FYTjBiM0o1SWpwYlhTd2lkVzV0WVhSamFHVmtYM0psWTJWcGRtVmtYMjl3ZEdsdmJuTWlPbHRkTENKdmQyNWxjbk5vYVhBaU9uc2ljM1JoZEhWeklqb2lkVzUyWlhKcFptbGxaQ0o5TENKcmJtOTNiaUk2Wm1Gc2MyVXNJbWx1WTJ4MWMybHZiaUk2Ym5Wc2JDd2laR2x6WTJ4aGFXMWxjaUk2SWtOdmJuTnBjM1JsYm1ONUlIZHBkR2dnYVc1a1pYQmxibVJsYm5RZ2IySnpaWEoyWVhScGIyNGdiMjVzZVM0Z1RtOTBJR0VnYzJGbVpYUjVMQ0JrWld4cGRtVnllU3dnYjNJZ2NHRjViV1Z1ZENCbmRXRnlZVzUwWldVdUluMCIsImV2aWRlbmNlIjpudWxsLCJjb21wdXRlX3Byb29mIjpudWxsfQ",
+      "payload_sha256": "ba045387069904a105c39c28507990c91a25a79191d97a896e65af874002357a",
+      "signature": {
+        "algorithm": "Ed25519",
+        "key_id": "sha256:7eb8000c99b6e474b553fa38757d76fabf5f527e885dbfd5b373acc0366bff85",
+        "public_key": "ht9fpmqvRbHgSrmjfsMW11y1h0Lsy4aRFT5rQImgTKg",
+        "value": "r3oo-d94YN0EAxBdWrQwwL-r3gvL1rL4f3hGHWvgN2Y-riLNP6Yvvyw28Yc3u0uI_o43VETaLEQMx63L0305Bw"
+      }
+    },
+    "trusted_policy": {
+      "expected_issuer": "https://ifandonlyif.io",
+      "trusted_key_ids": [
+        "sha256:7eb8000c99b6e474b553fa38757d76fabf5f527e885dbfd5b373acc0366bff85"
+      ]
+    },
+    "current_time": "2026-09-01T03:06:00.000000Z",
+    "expected": {
+      "signature_valid": true,
+      "issuer_trusted": true,
+      "expired": false,
+      "not_yet_valid": false,
+      "evidence_status": "absent",
+      "compute_proof_status": "absent"
+    }
+  },
+  "evidence_compute": {
+    "description": "Evidence/compute descriptor vector bound to transparency-log test leaf 5. Base verification intentionally leaves both extensions unverified.",
+    "canonical_request": "{}",
+    "canonical_subject": "{\"evidence_reference\":{\"observation_id\":\"00000000-0000-4000-8000-000000000005\",\"report_hash\":\"634ab955a31391929d7b38b92cc32e0928148f163d1b3d4d2aceefb8aa3f1b15\",\"leaf_hash\":\"3439e1d1fbbe350a9b2bbf7546312485de89f33f2fe176ac4a0d9cdcf78e8747\"},\"result\":\"descriptor-vector\"}",
+    "canonical_payload": "{\"schema\":\"https://ifandonlyif.io/schemas/service-receipt-v1.json\",\"receipt_id\":\"sr1_AAECAwQFBgcICQoLDA0ODxAR\",\"issuer\":\"https://ifandonlyif.io\",\"service\":\"test-vector\",\"issued_at\":\"2026-09-01T03:04:05.000000Z\",\"expires_at\":\"2026-09-01T03:09:05.000000Z\",\"nonce\":null,\"request_sha256\":\"40ecff77ec2ee258ba69b99f9bdab3c36caa0636184d4641df31fa407d4c917e\",\"subject_media_type\":\"application/json\",\"subject_sha256\":\"7d7340eb96ce50d20618d7de1bd1a2433696409681047a072f816bc138d58848\",\"subject\":\"eyJldmlkZW5jZV9yZWZlcmVuY2UiOnsib2JzZXJ2YXRpb25faWQiOiIwMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDUiLCJyZXBvcnRfaGFzaCI6IjYzNGFiOTU1YTMxMzkxOTI5ZDdiMzhiOTJjYzMyZTA5MjgxNDhmMTYzZDFiM2Q0ZDJhY2VlZmI4YWEzZjFiMTUiLCJsZWFmX2hhc2giOiIzNDM5ZTFkMWZiYmUzNTBhOWIyYmJmNzU0NjMxMjQ4NWRlODlmMzNmMmZlMTc2YWM0YTBkOWNkY2Y3OGU4NzQ3In0sInJlc3VsdCI6ImRlc2NyaXB0b3ItdmVjdG9yIn0\",\"evidence\":{\"observation_id\":\"00000000-0000-4000-8000-000000000005\",\"report_hash\":\"634ab955a31391929d7b38b92cc32e0928148f163d1b3d4d2aceefb8aa3f1b15\",\"leaf_hash\":\"3439e1d1fbbe350a9b2bbf7546312485de89f33f2fe176ac4a0d9cdcf78e8747\",\"log_id\":\"7eb8000c99b6e474b553fa38757d76fa\",\"log_index\":\"5\",\"tree_size\":\"8\",\"sth_root_hash\":\"c6f684ce14d150072e8237a2d0183d75c6681088c406914e684fb0ba8b6eb8fb\",\"sth_sha256_hash\":\"f720c1d3e30681e46da027da6bbb4c5d266d4a6afae1ad832da29caa82187258\"},\"compute_proof\":{\"type\":\"zk-proof\",\"provider\":\"example-provider\",\"artifact_sha256\":\"8af76434d4982d296bac1f51b4f8668e16965268410f94111a0804e72a1a71ad\",\"artifact_uri\":\"https://proofs.example/service-receipt-vector.bin\",\"verifier\":\"example-adapter/v1\"}}",
+    "payload_sha256": "e402c0bb587e0c9dfc5fe85cf2ddc89b36d8ba1532cbe4e1ec2f921c5cd7dd08",
+    "signing_digest_sha256": "cfa7f7c9d71edc141629a298cf934663c3f37aded5ca8ea228ab6fd03bab3971",
+    "key_id": "sha256:7eb8000c99b6e474b553fa38757d76fabf5f527e885dbfd5b373acc0366bff85",
+    "public_key_base64url": "ht9fpmqvRbHgSrmjfsMW11y1h0Lsy4aRFT5rQImgTKg",
+    "signature_base64url": "OElqMaxM6Ost9Dq0nPfPp0Wh-or-dr6B0EX2lP6wp7oCLN-w8vJKxCkORQMz85w-8NaYbo6cIFImLil_MtoMDg",
+    "envelope": {
+      "schema": "https://ifandonlyif.io/schemas/service-receipt-v1.json",
+      "payload": "eyJzY2hlbWEiOiJodHRwczovL2lmYW5kb25seWlmLmlvL3NjaGVtYXMvc2VydmljZS1yZWNlaXB0LXYxLmpzb24iLCJyZWNlaXB0X2lkIjoic3IxX0FBRUNBd1FGQmdjSUNRb0xEQTBPRHhBUiIsImlzc3VlciI6Imh0dHBzOi8vaWZhbmRvbmx5aWYuaW8iLCJzZXJ2aWNlIjoidGVzdC12ZWN0b3IiLCJpc3N1ZWRfYXQiOiIyMDI2LTA5LTAxVDAzOjA0OjA1LjAwMDAwMFoiLCJleHBpcmVzX2F0IjoiMjAyNi0wOS0wMVQwMzowOTowNS4wMDAwMDBaIiwibm9uY2UiOm51bGwsInJlcXVlc3Rfc2hhMjU2IjoiNDBlY2ZmNzdlYzJlZTI1OGJhNjliOTlmOWJkYWIzYzM2Y2FhMDYzNjE4NGQ0NjQxZGYzMWZhNDA3ZDRjOTE3ZSIsInN1YmplY3RfbWVkaWFfdHlwZSI6ImFwcGxpY2F0aW9uL2pzb24iLCJzdWJqZWN0X3NoYTI1NiI6IjdkNzM0MGViOTZjZTUwZDIwNjE4ZDdkZTFiZDFhMjQzMzY5NjQwOTY4MTA0N2EwNzJmODE2YmMxMzhkNTg4NDgiLCJzdWJqZWN0IjoiZXlKbGRtbGtaVzVqWlY5eVpXWmxjbVZ1WTJVaU9uc2liMkp6WlhKMllYUnBiMjVmYVdRaU9pSXdNREF3TURBd01DMHdNREF3TFRRd01EQXRPREF3TUMwd01EQXdNREF3TURBd01EVWlMQ0p5WlhCdmNuUmZhR0Z6YUNJNklqWXpOR0ZpT1RVMVlUTXhNemt4T1RJNVpEZGlNemhpT1RKall6TXlaVEE1TWpneE5EaG1NVFl6WkRGaU0yUTBaREpoWTJWbFptSTRZV0V6WmpGaU1UVWlMQ0pzWldGbVgyaGhjMmdpT2lJek5ETTVaVEZrTVdaaVltVXpOVEJoT1dJeVltSm1OelUwTmpNeE1qUTROV1JsT0RsbU16Tm1NbVpsTVRjMllXTTBZVEJrT1dOa1kyWTNPR1U0TnpRM0luMHNJbkpsYzNWc2RDSTZJbVJsYzJOeWFYQjBiM0l0ZG1WamRHOXlJbjAiLCJldmlkZW5jZSI6eyJvYnNlcnZhdGlvbl9pZCI6IjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwNSIsInJlcG9ydF9oYXNoIjoiNjM0YWI5NTVhMzEzOTE5MjlkN2IzOGI5MmNjMzJlMDkyODE0OGYxNjNkMWIzZDRkMmFjZWVmYjhhYTNmMWIxNSIsImxlYWZfaGFzaCI6IjM0MzllMWQxZmJiZTM1MGE5YjJiYmY3NTQ2MzEyNDg1ZGU4OWYzM2YyZmUxNzZhYzRhMGQ5Y2RjZjc4ZTg3NDciLCJsb2dfaWQiOiI3ZWI4MDAwYzk5YjZlNDc0YjU1M2ZhMzg3NTdkNzZmYSIsImxvZ19pbmRleCI6IjUiLCJ0cmVlX3NpemUiOiI4Iiwic3RoX3Jvb3RfaGFzaCI6ImM2ZjY4NGNlMTRkMTUwMDcyZTgyMzdhMmQwMTgzZDc1YzY2ODEwODhjNDA2OTE0ZTY4NGZiMGJhOGI2ZWI4ZmIiLCJzdGhfc2hhMjU2X2hhc2giOiJmNzIwYzFkM2UzMDY4MWU0NmRhMDI3ZGE2YmJiNGM1ZDI2NmQ0YTZhZmFlMWFkODMyZGEyOWNhYTgyMTg3MjU4In0sImNvbXB1dGVfcHJvb2YiOnsidHlwZSI6InprLXByb29mIiwicHJvdmlkZXIiOiJleGFtcGxlLXByb3ZpZGVyIiwiYXJ0aWZhY3Rfc2hhMjU2IjoiOGFmNzY0MzRkNDk4MmQyOTZiYWMxZjUxYjRmODY2OGUxNjk2NTI2ODQxMGY5NDExMWEwODA0ZTcyYTFhNzFhZCIsImFydGlmYWN0X3VyaSI6Imh0dHBzOi8vcHJvb2ZzLmV4YW1wbGUvc2VydmljZS1yZWNlaXB0LXZlY3Rvci5iaW4iLCJ2ZXJpZmllciI6ImV4YW1wbGUtYWRhcHRlci92MSJ9fQ",
+      "payload_sha256": "e402c0bb587e0c9dfc5fe85cf2ddc89b36d8ba1532cbe4e1ec2f921c5cd7dd08",
+      "signature": {
+        "algorithm": "Ed25519",
+        "key_id": "sha256:7eb8000c99b6e474b553fa38757d76fabf5f527e885dbfd5b373acc0366bff85",
+        "public_key": "ht9fpmqvRbHgSrmjfsMW11y1h0Lsy4aRFT5rQImgTKg",
+        "value": "OElqMaxM6Ost9Dq0nPfPp0Wh-or-dr6B0EX2lP6wp7oCLN-w8vJKxCkORQMz85w-8NaYbo6cIFImLil_MtoMDg"
+      }
+    },
+    "trusted_policy": {
+      "expected_issuer": "https://ifandonlyif.io",
+      "trusted_key_ids": [
+        "sha256:7eb8000c99b6e474b553fa38757d76fabf5f527e885dbfd5b373acc0366bff85"
+      ]
+    },
+    "current_time": "2026-09-01T03:06:00.000000Z",
+    "expected": {
+      "signature_valid": true,
+      "issuer_trusted": true,
+      "expired": false,
+      "not_yet_valid": false,
+      "evidence_status": "referenced_unverified",
+      "compute_proof_status": "descriptor_signed_unverified"
+    }
+  },
+  "negative_cases": [
+    {
+      "name": "tampered_payload",
+      "mutation": "replace checkout_7f3a with checkout_7f3b in canonical_payload without changing payload_sha256 or signature",
+      "expected_error": "payload_sha256 mismatch"
+    },
+    {
+      "name": "tampered_signature",
+      "mutation": "flip the first decoded signature byte",
+      "expected_error": "invalid service receipt signature"
+    },
+    {
+      "name": "wrong_expected_issuer",
+      "mutation": "verify the valid envelope with expected issuer https://other.example",
+      "expected": { "signature_valid": true, "issuer_trusted": false }
+    },
+    {
+      "name": "expires_at_boundary",
+      "mutation": "verify the valid envelope at 2026-09-01T03:09:05.000000Z",
+      "expected": { "signature_valid": true, "expired": true }
+    },
+    {
+      "name": "noncanonical_public_key_base64url",
+      "mutation": "change the final public-key character g to h, preserving decoded high bits but setting unused trailing bits",
+      "expected_error": "non-canonical base64url"
+    }
+  ]
+}

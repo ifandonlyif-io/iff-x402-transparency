@@ -35,6 +35,12 @@ jobs:
         run: |
           python3 -B spec/verify_example.py --self-test
           python3 -B -m unittest discover -s spec -p 'test_*.py' -v
+          python3 -m json.tool schemas/service-receipt-v1.json >/dev/null
+          python3 -m json.tool schemas/service-receipt-key-directory-v1.json >/dev/null
+          python3 -m json.tool spec/testdata/service_receipt_v1.json >/dev/null
+
+      - name: Test browser receipt verifier core
+        run: node --test browser/service-receipt.test.mjs
 
       - name: Test Go module
         working-directory: go
