@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ifandonlyif.io/schemas/service-receipt-v1.json",
+  "title": "IFF Service Receipt v1",
+  "oneOf": [
+    { "$ref": "#/$defs/envelope" },
+    { "$ref": "#/$defs/payload" }
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "base64url": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "public_key", "value"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "key_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "public_key": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+        "value": { "type": "string", "pattern": "^[A-Za-z0-9_-]{86}$" }
+      }
+    },
+    "envelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "payload", "payload_sha256", "signature"],
+      "properties": {
+        "schema": { "const": "https://ifandonlyif.io/schemas/service-receipt-v1.json" },
+        "payload": { "$ref": "#/$defs/base64url" },
+        "payload_sha256": { "$ref": "#/$defs/digest" },
+        "signature": { "$ref": "#/$defs/signature" }
+      }
+    },
+    "evidence": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["observation_id", "report_hash", "leaf_hash", "log_id", "log_index", "tree_size", "sth_root_hash", "sth_sha256_hash"],
+      "properties": {
+        "observation_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "report_hash": { "$ref": "#/$defs/digest" },
+        "leaf_hash": { "$ref": "#/$defs/digest" },
+        "log_id": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "log_index": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" },
+        "tree_size": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "sth_root_hash": { "$ref": "#/$defs/digest" },
+        "sth_sha256_hash": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "compute_proof": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["type", "provider", "artifact_sha256", "artifact_uri", "verifier"],
+      "properties": {
+        "type": { "type": "string", "pattern": "^[A-Za-z0-9_.:/@-]{1,128}$" },
+        "provider": { "type": "string", "pattern": "^[A-Za-z0-9_.:/@-]{1,128}$" },
+        "artifact_sha256": { "$ref": "#/$defs/digest" },
+        "artifact_uri": {
+          "oneOf": [
+            { "const": "" },
+            { "type": "string", "pattern": "^https://[A-Za-z0-9._~:/?#%+@=-]{1,2040}$" }
+          ]
+        },
+        "verifier": { "type": "string", "pattern": "^[A-Za-z0-9_.:/@-]{1,128}$" }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "receipt_id", "issuer", "service", "issued_at", "expires_at", "nonce", "request_sha256", "subject_media_type", "subject_sha256", "subject", "evidence", "compute_proof"],
+      "properties": {
+        "schema": { "const": "https://ifandonlyif.io/schemas/service-receipt-v1.json" },
+        "receipt_id": { "type": "string", "pattern": "^sr1_[A-Za-z0-9_-]{24}$" },
+        "issuer": { "type": "string", "maxLength": 2048 },
+        "service": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$" },
+        "issued_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$" },
+        "expires_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$" },
+        "nonce": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+        "request_sha256": { "$ref": "#/$defs/digest" },
+        "subject_media_type": { "const": "application/json" },
+        "subject_sha256": { "$ref": "#/$defs/digest" },
+        "subject": { "$ref": "#/$defs/base64url" },
+        "evidence": { "$ref": "#/$defs/evidence" },
+        "compute_proof": { "$ref": "#/$defs/compute_proof" }
+      }
+    }
+  }
+}

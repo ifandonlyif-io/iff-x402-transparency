@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ifandonlyif.io/schemas/service-receipt-key-directory-v1.json",
+  "title": "IFF Service Receipt Key Directory v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "issuer", "enabled", "keys"],
+  "properties": {
+    "schema": { "const": "https://ifandonlyif.io/schemas/service-receipt-key-directory-v1.json" },
+    "issuer": { "type": "string" },
+    "enabled": { "type": "boolean" },
+    "keys": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key_id", "algorithm", "public_key", "purpose", "status"],
+        "properties": {
+          "key_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+          "algorithm": { "const": "Ed25519" },
+          "public_key": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+          "purpose": { "const": "service-receipt-signing" },
+          "status": { "enum": ["current", "previous", "inactive"] }
+        }
+      }
+    }
+  }
+}
