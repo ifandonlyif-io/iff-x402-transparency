@@ -29,5 +29,11 @@ claims. Never add production secrets, private signing keys, server/deployment
 configuration, owner/auth state, or hosted UI code to this verification-only
 slice. Public test seeds must remain clearly labelled as untrusted test data.
 
+Changes under `keys/` must go through the protected-branch pull-request and
+required-CI path. Pin exact issuer, full key ID, and public-key bytes in a dated
+snapshot; retain prior snapshots for historical verification. Tests must use
+the committed bytes as their trust input and MUST NOT bootstrap a pin from the
+mutable live key-directory endpoint.
+
 Report security-sensitive findings through [SECURITY.md](SECURITY.md), not a
 public issue.
