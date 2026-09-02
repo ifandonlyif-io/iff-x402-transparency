@@ -2,9 +2,10 @@
 // conformance vectors as IFF's production evidence service.
 //
 // SHA-256 is computed via WebCrypto (globalThis.crypto.subtle), available
-// without any package dependency in Node >=20 and in every browser. That is
-// the only reason these functions are async: Go's ComputeFingerprint is
-// synchronous, but crypto.subtle.digest always returns a Promise.
+// without any package dependency in supported Node >=22 releases and in every
+// browser. That is the only reason these functions are async: Go's
+// ComputeFingerprint is synchronous, but crypto.subtle.digest always returns
+// a Promise.
 
 /** The x402 v2 payment option shape this SDK fingerprints. Field names are
  * idiomatic camelCase (matching the x402 wire format's `payTo`/

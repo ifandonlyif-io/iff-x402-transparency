@@ -4,6 +4,10 @@ updates:
     directory: /ts
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
   - package-ecosystem: gomod
     directory: /go
     schedule:

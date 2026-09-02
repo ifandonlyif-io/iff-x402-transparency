@@ -19,6 +19,11 @@ checklist this version went through.
   surface existed — a caller does not need to branch on API version to
   keep using the fields it already read.
 
+### Changed
+
+- The minimum supported runtime is now Node.js 22. CI verifies both the
+  minimum Node.js 22 line and the Node.js 24 release runtime.
+
 ### Fixed
 
 - None since 0.1.0's publish; 0.1.0 on npm predates PR #15 by about five
