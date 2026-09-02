@@ -20,8 +20,8 @@ IFF's production server is, so a `consistent` verdict here reflects the
 server's own computation, not a separate approximation of it.
 
 The core library uses only global `fetch` and WebCrypto `crypto.subtle`, both
-available in Node >= 20 and modern browsers. The bundled optional MCP command
-uses the Model Context Protocol SDK.
+available in supported Node >= 22 releases and modern browsers. The bundled
+optional MCP command uses the Model Context Protocol SDK.
 
 ## Install
 
