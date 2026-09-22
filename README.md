@@ -1,5 +1,9 @@
 # iff-x402-transparency
 
+[English](README.md) · [日本語](README.ja.md) · [繁體中文](README.zh-hant.md) · [简体中文](README.zh-hans.md)
+
+[IFF Monitor](https://ifandonlyif.io/monitor) · [SDK guide](https://ifandonlyif.io/sdk) · [API documentation](https://ifandonlyif.io/docs)
+
 The public, trust-critical verification surface for IFF's x402 requirement
 transparency log and Service Receipt v1: protocol specifications, JSON
 Schemas, known-answer vectors, offline verifiers, and TypeScript and Go
@@ -8,6 +12,35 @@ clients.
 The goal is narrow and testable: let an independent reader verify published
 log outputs and signed service receipts without relying on undocumented
 server logic.
+
+## Choose a starting point
+
+| Your task | Start here |
+|---|---|
+| Compare an x402 payment requirement before applying your payment policy | Published TypeScript or Go preflight SDK |
+| Independently check log signatures, inclusion and append-only consistency | Python reference verifier and retained checkpoints |
+| Check a signed Service Receipt or a saved API response | Go receipt CLI or browser verifier core from this checkout |
+| Review or implement the wire protocol | Specifications, schemas and cross-language test vectors |
+
+Install the published preflight SDKs:
+
+```bash
+npm install @ifandonlyif/x402-preflight@0.2.0
+go get github.com/ifandonlyif-io/iff-x402-transparency/go@v0.2.0
+```
+
+Use the npm command in your JavaScript/TypeScript project, or the Go command in
+an initialized Go module. See the [TypeScript guide](ts/README.md),
+[npm package](https://www.npmjs.com/package/@ifandonlyif/x402-preflight/v/0.2.0)
+and [Go API reference](https://pkg.go.dev/github.com/ifandonlyif-io/iff-x402-transparency/go@v0.2.0).
+The releases use tags `ts/v0.2.0` and `go/v0.2.0`.
+The Go `v0.2.0` tag contains fingerprint/preflight support; the Service Receipt
+package and CLI are newer source on `main`. Use the checkout commands below for
+receipt verification; do not assume that the old tag contains those tools.
+
+Preflight compares requirements with IFF observations; it does not execute a
+payment. Callers keep their own payment policy. Results remain `consistent`,
+`diverged`, `unobserved` or `stale`.
 
 ## What's here
 
@@ -126,7 +159,18 @@ Those components are not needed to reproduce canonical receipt verification.
 The receipt vector contains only a conspicuously labelled public test seed;
 never trust or deploy that key.
 
+## Related IFF projects
+
+[iff-apostille](https://github.com/ifandonlyif-io/iff-apostille) provides
+issuer-neutral signatures and offline verification for producer artifacts.
+Apostille records do not feed x402 monitor observations, transparency logs or
+reputation. Its Core 0.1 alpha has a separate release and trust policy.
+
 ## Development
+
+Run the following from a checkout of this repository. Current CI uses Go 1.26.6
+and Node.js 24, and also checks Node.js 22 compatibility. Python 3 and npm are
+required for the checks below.
 
 ```bash
 (cd go && go test ./...)
