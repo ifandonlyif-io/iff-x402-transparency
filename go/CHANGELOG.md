@@ -5,22 +5,30 @@ are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning
 follows [SemVer](https://semver.org/).
 
-This module has never been tagged or released — `go get` of it fails today
-because the containing repository is private (see
-`docs/PUBLIC_RELEASE.md`). Versions below are conceptual until a release
-path (a git tag on this repository, or a tag in an extracted public repo)
-exists; each entry names the commit it corresponds to.
+Releases are tags `go/vX.Y.Z` on this repository.
 
-## [0.2.0] - Unreleased
+## [0.3.0] - 2026-10-10
 
 ### Added
 
-- Service Receipt v2 (ML-DSA-65, `crypto/mldsa`) in `receipt` and
-  `iff-receipt-verify`: the envelope schema selects v1 (Ed25519) or v2, and the
-  CLI output reports `schema` and `algorithm`. v1 receipts still verify.
-  Requires Go 1.27 (`go.mod` is now `go 1.27.0`).
-- Known-answer vector tests for `spec/testdata/service_receipt_v2.json` and the
-  ML-DSA-65 primitive (`internal/mldsavectors`, not part of the public API).
+- `receipt` package: verifies IFF Service Receipt v1 (Ed25519) and v2
+  (ML-DSA-65, signature profile v2). The envelope schema selects the version,
+  and the algorithm, key and signature sizes must match it. Standard library
+  only.
+- `cmd/iff-receipt-verify`: offline receipt verification. Output reports
+  `schema` and `algorithm`; `-trusted-key-id` and `-require-trust` pin the issuer key.
+- Known-answer vector tests for `spec/testdata/service_receipt_v1.json`,
+  `service_receipt_v2.json` and the ML-DSA-65 primitive
+  (`internal/mldsavectors`, not part of the public API).
+
+### Changed
+
+- Requires Go 1.27 (`go.mod` is `go 1.27.0`) for `crypto/mldsa`.
+
+## [0.2.0] - 2026-08-30
+
+### Added
+
 - The private monitor now imports this module for its production requirement
   fingerprints, making this implementation the source of truth rather than a
   parallel SDK copy.
@@ -37,7 +45,7 @@ exists; each entry names the commit it corresponds to.
 - Zero external dependencies (standard library only) — confirmed via
   `GOFLAGS=-mod=mod go build ./...` with `GOMODCACHE` pointed at a clean
   temporary directory. No `go.sum` exists or is needed while this holds.
-- Release from the extracted public repository with tag `go/v0.2.0`.
+- Released as tag `go/v0.2.0`.
 
 ## [0.1.0] - commit `c3eef6a`
 
