@@ -1,6 +1,22 @@
-export const RECEIPT_SCHEMA = "https://ifandonlyif.io/schemas/service-receipt-v1.json";
-export const RECEIPT_ALGORITHM = "Ed25519";
-export const RECEIPT_DOMAIN = "iff-service-receipt/v1\n";
+// Service Receipt v1 (Ed25519, historical) and v2 (ML-DSA-65, issued). The
+// envelope schema decides the version; the algorithm, key size and signature
+// size must match it, and the signed payload schema must equal the envelope's.
+export const RECEIPT_SCHEMA_V1 = "https://ifandonlyif.io/schemas/service-receipt-v1.json";
+export const RECEIPT_SCHEMA_V2 = "https://ifandonlyif.io/schemas/service-receipt-v2.json";
+export const RECEIPT_ALGORITHM_ED25519 = "Ed25519";
+export const RECEIPT_ALGORITHM_MLDSA65 = "ML-DSA-65";
+export const RECEIPT_DOMAIN_V1 = "iff-service-receipt/v1\n";
+export const RECEIPT_DOMAIN_V2 = "iff-service-receipt/v2\n";
+export const KEY_DIRECTORY_SCHEMA_V1 = "https://ifandonlyif.io/schemas/service-receipt-key-directory-v1.json";
+export const KEY_DIRECTORY_SCHEMA_V2 = "https://ifandonlyif.io/schemas/service-receipt-key-directory-v2.json";
+// The v1 names stay as aliases of the historical profile.
+export const RECEIPT_SCHEMA = RECEIPT_SCHEMA_V1;
+export const RECEIPT_ALGORITHM = RECEIPT_ALGORITHM_ED25519;
+export const RECEIPT_DOMAIN = RECEIPT_DOMAIN_V1;
+const RECEIPT_PROFILES = Object.freeze({
+    [RECEIPT_SCHEMA_V1]: Object.freeze({ version: "1", algorithm: RECEIPT_ALGORITHM_ED25519, publicKeySize: 32, signatureSize: 64 }),
+    [RECEIPT_SCHEMA_V2]: Object.freeze({ version: "2", algorithm: RECEIPT_ALGORITHM_MLDSA65, publicKeySize: 1952, signatureSize: 3309 }),
+});
 export const REQUEST_HASH_DOMAIN = "iff-service-receipt/request/v1\n";
 export const SUBJECT_HASH_DOMAIN = "iff-service-receipt/subject/v1\n";
 export const MAX_RECEIPT_INPUT_BYTES = 256 * 1024;
@@ -30,6 +46,17 @@ export class ReceiptVerificationError extends Error {
 
 function fail(code, message) {
     throw new ReceiptVerificationError(code, message);
+}
+
+// File APIs normally decode malformed UTF-8 with replacement characters.
+// Decode the original bytes strictly so uploaded receipts follow the same
+// rejection rule as the Go and CLI verifiers.
+export function decodeReceiptInputBytes(bytes) {
+    try {
+        return textDecoder.decode(bytes);
+    } catch {
+        fail("invalid_input_utf8", "Receipt input is not valid UTF-8.");
+    }
 }
 
 function own(object, key) {
@@ -66,6 +93,9 @@ export function parseJSONStrict(text) {
                 const raw = text.slice(start, position);
                 let value;
                 try { value = JSON.parse(raw); } catch { fail("invalid_json", "JSON contains an invalid string escape."); }
+                if (!hasOnlyPairedUTF16Surrogates(value)) {
+                    fail("invalid_json", "JSON contains an unpaired Unicode surrogate.");
+                }
                 return { kind: "string", value, canonical: JSON.stringify(value) };
             }
             if (!escaped && character.charCodeAt(0) < 0x20) fail("invalid_json", "JSON string contains a control character.");
@@ -163,12 +193,29 @@ export function parseJSONStrict(text) {
     return { value: node.value, node };
 }
 
+function hasOnlyPairedUTF16Surrogates(value) {
+    for (let index = 0; index < value.length; index += 1) {
+        const unit = value.charCodeAt(index);
+        if (unit >= 0xd800 && unit <= 0xdbff) {
+            const low = value.charCodeAt(index + 1);
+            if (!(low >= 0xdc00 && low <= 0xdfff)) return false;
+            index += 1;
+        } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+            return false;
+        }
+    }
+    return true;
+}
+
 function canonicalNode(node, omitTopLevelKey = "") {
     switch (node.kind) {
     case "object": {
         const entries = node.entries
             .filter(({ key }) => key !== omitTopLevelKey)
-            .sort((left, right) => left.key.localeCompare(right.key));
+            // Locale collation can treat distinct keys as equal and varies by
+            // runtime. UTF-16 lexical order is deterministic; both documents
+            // retain the original numeric lexemes in their syntax trees.
+            .sort((left, right) => left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
         return `{${entries.map(({ key, node: child }) => `${JSON.stringify(key)}:${canonicalNode(child)}`).join(",")}}`;
     }
     case "array": return `[${node.items.map((item) => canonicalNode(item)).join(",")}]`;
@@ -222,23 +269,52 @@ function safeCanonicalString(value) {
     });
 }
 
-function validateIssuer(value) {
+function isHTTPLoopbackHostname(hostname) {
+    if (hostname === "localhost" || hostname === "[::1]") return true;
+    const octets = hostname.split(".");
+    return octets.length === 4 && octets[0] === "127" &&
+        octets.every((octet) => /^(0|[1-9]\d{0,2})$/.test(octet) && Number(octet) <= 255);
+}
+
+function isIPv4MappedIPv6Hostname(hostname) {
+    // Go's canonical IP formatter intentionally collapses ::ffff:0:0/96 to
+    // dotted IPv4 while WHATWG URL keeps two hexadecimal tail groups. Reject
+    // this ambiguous family so all verifiers apply the same issuer policy.
+    return /^\[::ffff:[0-9a-f]{1,4}:[0-9a-f]{1,4}\]$/.test(hostname);
+}
+
+function isCanonicalDNSHostname(hostname) {
+    if (hostname.length === 0 || hostname.length > 253 || hostname.endsWith(".")) return false;
+    return hostname.split(".").every((label) =>
+        label.length > 0 && label.length <= 63 && /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label));
+}
+
+function isCanonicalIPHostname(hostname) {
+    if (hostname.startsWith("[") && hostname.endsWith("]")) return true;
+    const octets = hostname.split(".");
+    return octets.length === 4 && octets.every((octet) =>
+        /^(0|[1-9]\d{0,2})$/.test(octet) && Number(octet) <= 255);
+}
+
+export function validateIssuer(value) {
     if (!safeCanonicalString(value)) return false;
     let parsed;
     try { parsed = new URL(value); } catch { return false; }
-    const localHTTP = parsed.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+    if (isIPv4MappedIPv6Hostname(parsed.hostname)) return false;
+    if (!isCanonicalIPHostname(parsed.hostname) && !isCanonicalDNSHostname(parsed.hostname)) return false;
+    const localHTTP = parsed.protocol === "http:" && isHTTPLoopbackHostname(parsed.hostname);
     return (parsed.protocol === "https:" || localHTTP) && parsed.origin === value && parsed.username === "" && parsed.password === "";
 }
 
-function validateTimestamp(value, label) {
+function validateTimestamp(value, label, errorCode = "invalid_timestamp") {
     if (typeof value !== "string" || !TIMESTAMP_PATTERN.test(value) || Number.isNaN(Date.parse(value))) {
-        fail("invalid_timestamp", `${label} must be UTC with exactly six fractional digits.`);
+        fail(errorCode, `${label} must be UTC with exactly six fractional digits.`);
     }
     const milliseconds = Date.parse(value);
     if (new Date(milliseconds).toISOString() !== `${value.slice(0, 23)}Z`) {
-        fail("invalid_timestamp", `${label} is not a real canonical UTC date.`);
+        fail(errorCode, `${label} is not a real canonical UTC date.`);
     }
-    return milliseconds;
+    return BigInt(milliseconds) * 1000n + BigInt(value.slice(23, 26));
 }
 
 function parseCanonicalUint64(value, label) {
@@ -248,10 +324,10 @@ function parseCanonicalUint64(value, label) {
     return parsed;
 }
 
-function validatePayloadShape(payload, subjectBytes) {
+function validatePayloadShape(payload, subjectBytes, schema) {
     const fields = ["schema", "receipt_id", "issuer", "service", "issued_at", "expires_at", "nonce", "request_sha256", "subject_media_type", "subject_sha256", "subject", "evidence", "compute_proof"];
     requireExactKeys(payload, fields, "payload");
-    if (payload.schema !== RECEIPT_SCHEMA) fail("unsupported_schema", "The signed payload schema is not supported.");
+    if (payload.schema !== schema) fail("unsupported_schema", "The signed payload schema is not supported or differs from the envelope schema.");
     if (!/^sr1_[A-Za-z0-9_-]{24}$/.test(payload.receipt_id)) fail("invalid_payload", "receipt_id is invalid.");
     if (!validateIssuer(payload.issuer)) fail("invalid_payload", "issuer must be an HTTPS origin.");
     if (!SERVICE_PATTERN.test(payload.service)) fail("invalid_payload", "service is invalid.");
@@ -285,30 +361,71 @@ function validatePayloadShape(payload, subjectBytes) {
     return { issuedAt, expiresAt };
 }
 
-function normalizeNow(value) {
-    let result;
-    if (value instanceof Date) result = value.getTime();
-    else if (typeof value === "string") result = Date.parse(value);
-    else if (typeof value === "number") result = value;
-    else result = Date.now();
-    if (!Number.isFinite(result)) fail("invalid_now", "Verifier time is invalid.");
-    return result;
+function millisecondsToMicros(value) {
+    const wholeMilliseconds = Math.trunc(value);
+    const fractionalMicros = Math.trunc((value - wholeMilliseconds) * 1000);
+    return BigInt(wholeMilliseconds) * 1000n + BigInt(fractionalMicros);
 }
 
-function directoryRecognizes(directory, issuer, keyID, publicKey) {
+function normalizeNow(value) {
+    if (value instanceof Date) {
+        const milliseconds = value.getTime();
+        if (!Number.isFinite(milliseconds)) fail("invalid_now", "Verifier time is invalid.");
+        return millisecondsToMicros(milliseconds);
+    }
+    if (typeof value === "string") {
+        if (TIMESTAMP_PATTERN.test(value)) return validateTimestamp(value, "Verifier time", "invalid_now");
+        const milliseconds = Date.parse(value);
+        if (!Number.isFinite(milliseconds)) fail("invalid_now", "Verifier time is invalid.");
+        return millisecondsToMicros(milliseconds);
+    }
+    const milliseconds = typeof value === "number" ? value : Date.now();
+    if (!Number.isFinite(milliseconds)) fail("invalid_now", "Verifier time is invalid.");
+    return millisecondsToMicros(milliseconds);
+}
+
+// A directory entry recognizes a receipt only when key_id, algorithm and
+// public_key all equal the receipt's and the status is current, previous or
+// inactive. A v1 directory can only list Ed25519 keys.
+function directoryRecognizes(directory, issuer, keyID, publicKey, algorithm) {
     if (!directory || typeof directory !== "object" || Array.isArray(directory)) return false;
     try {
         requireExactKeys(directory, ["schema", "issuer", "enabled", "keys"], "key directory");
-        if (directory.schema !== "https://ifandonlyif.io/schemas/service-receipt-key-directory-v1.json" ||
+        const v1Directory = directory.schema === KEY_DIRECTORY_SCHEMA_V1;
+        if ((!v1Directory && directory.schema !== KEY_DIRECTORY_SCHEMA_V2) ||
             directory.issuer !== issuer || typeof directory.enabled !== "boolean" || !Array.isArray(directory.keys)) return false;
+        if (v1Directory && algorithm !== RECEIPT_ALGORITHM_ED25519) return false;
         return directory.keys.some((key) => {
             requireExactKeys(key, ["key_id", "algorithm", "public_key", "purpose", "status"], "directory key");
-            return key.key_id === keyID && key.public_key === publicKey && key.algorithm === RECEIPT_ALGORITHM &&
+            return key.key_id === keyID && key.public_key === publicKey && key.algorithm === algorithm &&
                 key.purpose === "service-receipt-signing" && ["current", "previous", "inactive"].includes(key.status);
         });
     } catch {
         return false;
     }
+}
+
+async function verifyReceiptSignature(profile, publicKey, signature, payloadBytes) {
+    if (profile.algorithm === RECEIPT_ALGORITHM_ED25519) {
+        const signingDigest = await sha256(concatBytes(textEncoder.encode(RECEIPT_DOMAIN_V1), payloadBytes));
+        let signingKey;
+        try {
+            signingKey = await globalThis.crypto.subtle.importKey("raw", publicKey, { name: "Ed25519" }, false, ["verify"]);
+        } catch {
+            fail("ed25519_unavailable", "This browser cannot import Ed25519 verification keys.");
+        }
+        return globalThis.crypto.subtle.verify({ name: "Ed25519" }, signingKey, signature, signingDigest);
+    }
+    // v2 signs the domain line followed by the payload digest with ML-DSA-65
+    // (empty context), through the vendored @noble/post-quantum 0.7.1.
+    let verifyMLDSA;
+    try {
+        ({ verifyMLDSA } = await import("./ml-dsa-65.mjs"));
+    } catch {
+        fail("mldsa_unavailable", "The ML-DSA-65 verifier could not be loaded.");
+    }
+    const message = concatBytes(textEncoder.encode(RECEIPT_DOMAIN_V2), await sha256(payloadBytes));
+    return verifyMLDSA(publicKey, message, signature);
 }
 
 export async function verifyServiceReceipt(inputText, options = {}) {
@@ -321,26 +438,22 @@ export async function verifyServiceReceipt(inputText, options = {}) {
     const envelope = embedded ? document.value.service_receipt : document.value;
     requireExactKeys(envelope, ["schema", "payload", "payload_sha256", "signature"], "envelope");
     requireExactKeys(envelope.signature, ["algorithm", "key_id", "public_key", "value"], "signature");
-    if (envelope.schema !== RECEIPT_SCHEMA) fail("unsupported_schema", "The receipt envelope schema is not supported.");
-    if (envelope.signature.algorithm !== RECEIPT_ALGORITHM) fail("unsupported_algorithm", "Only Ed25519 Service Receipt v1 signatures are supported.");
+    const profile = Object.hasOwn(RECEIPT_PROFILES, envelope.schema) ? RECEIPT_PROFILES[envelope.schema] : null;
+    if (profile === null) fail("unsupported_schema", "The receipt envelope schema is not supported.");
+    if (envelope.signature.algorithm !== profile.algorithm) {
+        fail("unsupported_algorithm", `Service Receipt v${profile.version} signatures must use ${profile.algorithm}.`);
+    }
     if (!DIGEST_PATTERN.test(envelope.payload_sha256) || !KEY_ID_PATTERN.test(envelope.signature.key_id)) fail("invalid_envelope", "Envelope hashes are malformed.");
 
     const payloadBytes = decodeBase64URL(envelope.payload, "payload");
     if (payloadBytes.length === 0 || payloadBytes.length > MAX_PAYLOAD_BYTES) fail("payload_size", "Decoded receipt payload size is invalid.");
     const payloadHash = await sha256(payloadBytes);
     if (hex(payloadHash) !== envelope.payload_sha256) fail("payload_hash_mismatch", "payload_sha256 does not match the signed payload bytes.");
-    const publicKey = decodeBase64URL(envelope.signature.public_key, "public_key", 32);
-    const signature = decodeBase64URL(envelope.signature.value, "signature", 64);
+    const publicKey = decodeBase64URL(envelope.signature.public_key, "public_key", profile.publicKeySize);
+    const signature = decodeBase64URL(envelope.signature.value, "signature", profile.signatureSize);
     const keyID = `sha256:${hex(await sha256(publicKey))}`;
     if (keyID !== envelope.signature.key_id) fail("key_id_mismatch", "key_id does not match the embedded public key.");
-    const signingDigest = await sha256(concatBytes(textEncoder.encode(RECEIPT_DOMAIN), payloadBytes));
-    let signingKey;
-    try {
-        signingKey = await globalThis.crypto.subtle.importKey("raw", publicKey, { name: "Ed25519" }, false, ["verify"]);
-    } catch {
-        fail("ed25519_unavailable", "This browser cannot import Ed25519 verification keys.");
-    }
-    if (!await globalThis.crypto.subtle.verify({ name: "Ed25519" }, signingKey, signature, signingDigest)) {
+    if (!await verifyReceiptSignature(profile, publicKey, signature, payloadBytes)) {
         fail("signature_mismatch", "Receipt contents and signature do not match.");
     }
 
@@ -351,7 +464,7 @@ export async function verifyServiceReceipt(inputText, options = {}) {
     const payload = payloadDocument.value;
     if (JSON.stringify(payload) !== payloadText) fail("noncanonical_payload", "Signed payload is not canonical fixed-order JSON.");
     const subjectBytes = decodeBase64URL(payload.subject, "subject");
-    const time = validatePayloadShape(payload, subjectBytes);
+    const time = validatePayloadShape(payload, subjectBytes, envelope.schema);
     if (hex(await sha256(concatBytes(textEncoder.encode(SUBJECT_HASH_DOMAIN), subjectBytes))) !== payload.subject_sha256) {
         fail("subject_hash_mismatch", "subject_sha256 does not match the signed result bytes.");
     }
@@ -368,9 +481,10 @@ export async function verifyServiceReceipt(inputText, options = {}) {
     const expectedIssuer = typeof options.expectedIssuer === "string" ? options.expectedIssuer : "";
     const trustedKeyIDs = new Set(Array.isArray(options.trustedKeyIDs) ? options.trustedKeyIDs : []);
     const issuerTrusted = expectedIssuer !== "" && payload.issuer === expectedIssuer && trustedKeyIDs.has(keyID);
-    const issuerKnown = directoryRecognizes(options.knownDirectory, payload.issuer, keyID, envelope.signature.public_key);
+    const issuerKnown = directoryRecognizes(options.knownDirectory, payload.issuer, keyID, envelope.signature.public_key, profile.algorithm);
     const now = normalizeNow(options.now);
-    const skew = Number.isFinite(options.clockSkewMs) && options.clockSkewMs >= 0 ? options.clockSkewMs : 0;
+    const skewMilliseconds = Number.isFinite(options.clockSkewMs) && options.clockSkewMs >= 0 ? options.clockSkewMs : 0;
+    const skew = millisecondsToMicros(skewMilliseconds);
     const expired = now >= time.expiresAt + skew;
     const notYetValid = now + skew < time.issuedAt;
     const subjectMatchesOuter = embedded
@@ -379,6 +493,8 @@ export async function verifyServiceReceipt(inputText, options = {}) {
 
     return {
         signatureValid: true,
+        version: profile.version,
+        algorithm: profile.algorithm,
         issuerTrusted,
         issuerKnown,
         issuerTrust: issuerTrusted ? "trusted" : issuerKnown ? "known" : "untrusted",

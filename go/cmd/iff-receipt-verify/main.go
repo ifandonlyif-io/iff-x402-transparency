@@ -1,5 +1,8 @@
-// iff-receipt-verify is an offline Service Receipt v1 verifier. The command
-// and the receipt package it calls use only the Go standard library.
+// iff-receipt-verify is an offline Service Receipt verifier. It verifies v2
+// (ML-DSA-65, the version IFF issues) and historical v1 (Ed25519) receipts; the
+// envelope schema decides the version and the algorithm must match it. The
+// command and the receipt package it calls use only the Go standard library
+// (Go 1.27 or later, for crypto/mldsa).
 package main
 
 import (
@@ -17,6 +20,8 @@ import (
 const maxInputBytes = 256 << 10
 
 type output struct {
+	Schema              string `json:"schema"`
+	Algorithm           string `json:"algorithm"`
 	ReceiptID           string `json:"receipt_id"`
 	Issuer              string `json:"issuer"`
 	Service             string `json:"service"`
@@ -34,9 +39,15 @@ type output struct {
 func main() {
 	file := flag.String("file", "-", "receipt envelope or full API response JSON file; - reads stdin")
 	expectedIssuer := flag.String("expected-issuer", "", "exact issuer origin required for issuer_trusted")
-	trustedKeyIDs := flag.String("trusted-key-id", "", "comma-separated full sha256: public-key fingerprints")
+	trustedKeyIDs := flag.String("trusted-key-id", "", "comma-separated full sha256: public-key fingerprints (key_id values) obtained out of band")
 	requireTrust := flag.Bool("require-trust", false, "exit non-zero unless issuer and a trusted key ID both match")
 	printSubject := flag.Bool("print-subject", false, "write the signed JSON subject after the verification summary")
+	flag.Usage = func() {
+		fmt.Fprintln(flag.CommandLine.Output(), "usage: iff-receipt-verify [flags]")
+		fmt.Fprintln(flag.CommandLine.Output(), "Verifies an IFF Service Receipt offline: v2 (ML-DSA-65) or historical v1 (Ed25519).")
+		fmt.Fprintln(flag.CommandLine.Output(), "The envelope schema selects the version; its algorithm, key and signature sizes must match.")
+		flag.PrintDefaults()
+	}
 	flag.Parse()
 
 	raw, err := readBounded(*file)
@@ -61,6 +72,7 @@ func main() {
 		subjectMatches = &matches
 	}
 	encoded, err := json.MarshalIndent(output{
+		Schema: verification.Payload.Schema, Algorithm: verification.Algorithm,
 		ReceiptID: verification.Payload.ReceiptID, Issuer: verification.Payload.Issuer,
 		Service: verification.Payload.Service, KeyID: verification.KeyID, PayloadSHA256: verification.PayloadSHA256,
 		SignatureValid: verification.SignatureValid, IssuerTrusted: verification.IssuerTrusted,

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ifandonlyif.io/schemas/service-receipt-key-directory-v2.json",
+  "title": "IFF Service Receipt Key Directory v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "issuer", "enabled", "keys"],
+  "properties": {
+    "schema": { "const": "https://ifandonlyif.io/schemas/service-receipt-key-directory-v2.json" },
+    "issuer": { "type": "string" },
+    "enabled": { "type": "boolean" },
+    "keys": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key_id", "algorithm", "public_key", "purpose", "status"],
+        "properties": {
+          "key_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+          "algorithm": { "enum": ["Ed25519", "ML-DSA-65"] },
+          "public_key": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
+          "purpose": { "const": "service-receipt-signing" },
+          "status": { "enum": ["current", "previous", "inactive"] }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "algorithm": { "const": "Ed25519" },
+              "public_key": { "pattern": "^[A-Za-z0-9_-]{43}$" }
+            }
+          },
+          {
+            "properties": {
+              "algorithm": { "const": "ML-DSA-65" },
+              "public_key": { "pattern": "^[A-Za-z0-9_-]{2603}$" }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
