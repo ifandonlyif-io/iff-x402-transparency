@@ -94,3 +94,35 @@ func TestSplitNonEmptyNormalizesCommaSeparatedPins(t *testing.T) {
 		t.Fatalf("unexpected split result: %#v", values)
 	}
 }
+
+func TestVectorEnvelopesOfBothVersionsVerify(t *testing.T) {
+	for path, want := range map[string]struct{ schema, algorithm string }{
+		"../../../spec/testdata/service_receipt_v1.json": {receipt.SchemaV1, receipt.AlgorithmEd25519},
+		"../../../spec/testdata/service_receipt_v2.json": {receipt.SchemaV2, receipt.AlgorithmMLDSA65},
+	} {
+		var vector struct {
+			Valid struct {
+				Envelope receipt.Envelope `json:"envelope"`
+			} `json:"valid"`
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(raw, &vector); err != nil {
+			t.Fatal(err)
+		}
+		envelopeRaw, _ := json.Marshal(vector.Valid.Envelope)
+		extracted, outer, err := extractEnvelope(envelopeRaw)
+		if err != nil || outer != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		verified, err := receipt.VerifyJSON(extracted, receipt.VerifyOptions{Now: time.Date(2026, 9, 1, 3, 6, 0, 0, time.UTC)})
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		if verified.Payload.Schema != want.schema || verified.Algorithm != want.algorithm {
+			t.Fatalf("%s: got %s %s", path, verified.Payload.Schema, verified.Algorithm)
+		}
+	}
+}

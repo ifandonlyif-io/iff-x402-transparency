@@ -337,6 +337,8 @@ digest**, not the JSON bytes and not the hex string:
 monitor_signature = base64( Ed25519-Sign(monitor_private_key, SHA-256(canonical_report_json)) )
 ```
 
+Profile v2 (ML-DSA-65): see [x402-signatures-ml-dsa-65.md](x402-signatures-ml-dsa-65.md) §4.
+
 A verifier checks a report by recomputing `canonical_report_json` from the
 report's own fields, confirming its SHA-256 digest equals the claimed
 `report_hash`, and — when a `monitor_public_key` is present — confirming
@@ -458,6 +460,8 @@ SHA-256 digest, not the canonical bytes directly and not the hex string.
 referenced by hash from an EVM on-chain record (§8), where Keccak-256 is
 the native hash function.
 
+Profile v2 (ML-DSA-65): see [x402-signatures-ml-dsa-65.md](x402-signatures-ml-dsa-65.md) §5.
+
 ### 5.3 Log identity
 
 ```
@@ -477,6 +481,8 @@ witness. Accepting both `public_key` and `log_id` from the same untrusted STH
 only proves that the two attacker-controlled values agree with each other.
 `GET /api/v3/log/keys` is useful for key history but, when served by the same
 operator, is not by itself an independent trust source.
+
+Profile v2 keys and `log_id`: see [x402-signatures-ml-dsa-65.md](x402-signatures-ml-dsa-65.md) §5 and §6.
 
 ### 5.4 Publication cadence
 
@@ -627,6 +633,8 @@ the current STH, full tree, inclusion proof, and consistency proof have all
 verified.
 
 ## 7. Key transparency
+
+Profile v2 rotates to ML-DSA-65 keys through this mechanism: see [x402-signatures-ml-dsa-65.md](x402-signatures-ml-dsa-65.md) §6.
 
 `GET /api/v3/log/keys` (§9.6) returns every contiguous log-key activation
 epoch (so a key reactivated after another key appears again as a new epoch),
@@ -790,6 +798,8 @@ See §7.
 
 ## 10. Test vectors
 
+Profile v2 (ML-DSA-65) vectors are `spec/testdata/signature_vectors_v2.json` (reference implementation), `spec/testdata/ml_dsa_65_vectors.json` (primitive, generated with Go's `crypto/mldsa`) and `spec/testdata/service_receipt_v2.json`: see [x402-signatures-ml-dsa-65.md](x402-signatures-ml-dsa-65.md) §8.
+
 Two checked-in vector files accompany this specification:
 
 - `spec/testdata/fingerprint_vectors.json` — requirement
@@ -818,7 +828,7 @@ independently verify (not merely re-derive) its `inclusion_proof`,
 ### 10.1 Runnable conformance example
 
 `spec/verify_example.py`, alongside this document, is a dependency-light
-(Python standard library only, including a from-scratch Ed25519 verifier)
+(Python standard library only, including a from-scratch Ed25519 verifier and, for signature profile v2, a from-scratch ML-DSA-65 verifier in `spec/ml_dsa_65.py`)
 reference verifier that implements exactly §4–§6's algorithms against a
 *running* log rather than the static vectors above: it fetches
 `GET /api/v3/log/sth`, `GET /api/v3/log/entries`, and

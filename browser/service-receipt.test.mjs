@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
@@ -307,4 +308,117 @@ test("semantic payload errors are reported after a valid signature", async () =>
 test("receipt input byte limit is enforced before parsing", async () => {
     const oversized = " ".repeat(MAX_RECEIPT_INPUT_BYTES + 1);
     await assert.rejects(() => verifyServiceReceipt(oversized), (error) => error.code === "input_size");
+});
+
+// --- Service Receipt v2 (ML-DSA-65) ---------------------------------------
+
+const vectorV2 = JSON.parse(readFileSync(new URL("../spec/testdata/service_receipt_v2.json", import.meta.url), "utf8"));
+const V2_CODES = {
+    invalid_envelope: ["noncanonical_base64url", "invalid_base64url", "invalid_length", "payload_hash_mismatch", "unsupported_algorithm", "key_id_mismatch", "invalid_envelope", "unexpected_field"],
+    invalid_signature: ["signature_mismatch"],
+    unsupported_schema: ["unsupported_schema"],
+};
+const v2Policy = {
+    now: vectorV2.valid.current_time,
+    expectedIssuer: vectorV2.valid.trusted_policy.expected_issuer,
+    trustedKeyIDs: vectorV2.valid.trusted_policy.trusted_key_ids,
+};
+
+test("v2 ML-DSA-65 vectors verify in the browser verifier and v1 still does", async () => {
+    const valid = await verifyServiceReceipt(JSON.stringify(vectorV2.valid.envelope), v2Policy);
+    assert.equal(valid.signatureValid, true);
+    assert.equal(valid.version, "2");
+    assert.equal(valid.algorithm, "ML-DSA-65");
+    assert.equal(valid.issuerTrust, "trusted");
+    assert.equal(valid.payload.schema, "https://ifandonlyif.io/schemas/service-receipt-v2.json");
+
+    const compute = await verifyServiceReceipt(JSON.stringify(vectorV2.evidence_compute.envelope), { ...v2Policy, now: vectorV2.evidence_compute.current_time });
+    assert.equal(compute.evidenceStatus, "referenced_unverified");
+    assert.equal(compute.computeProofStatus, "descriptor_signed_unverified");
+
+    const v1 = await verifyServiceReceipt(JSON.stringify(vector.valid.envelope), { now: vector.valid.current_time });
+    assert.equal(v1.version, "1");
+    assert.equal(v1.algorithm, "Ed25519");
+});
+
+test("every published v2 negative envelope is rejected with its error class", async () => {
+    for (const negative of vectorV2.negative_cases) {
+        if (negative.directory) continue;
+        const envelope = negative.envelope ?? vectorV2.valid.envelope;
+        const options = {
+            now: negative.current_time ?? vectorV2.valid.current_time,
+            expectedIssuer: negative.expected_issuer ?? v2Policy.expectedIssuer,
+            trustedKeyIDs: v2Policy.trustedKeyIDs,
+        };
+        if (negative.expected_error) {
+            await assert.rejects(verifyServiceReceipt(JSON.stringify(envelope), options), (error) => {
+                assert.ok(V2_CODES[negative.expected_error].includes(error.code), `${negative.name}: ${error.code}`);
+                return true;
+            }, negative.name);
+        } else {
+            const result = await verifyServiceReceipt(JSON.stringify(envelope), options);
+            assert.equal(result.signatureValid, negative.expected.signature_valid, negative.name);
+            if ("issuer_trusted" in negative.expected) assert.equal(result.issuerTrusted, negative.expected.issuer_trusted, negative.name);
+            if ("expired" in negative.expected) assert.equal(result.expired, negative.expected.expired, negative.name);
+        }
+    }
+});
+
+test("directory recognition requires key_id, algorithm and public_key to match", async () => {
+    const signature = vectorV2.valid.envelope.signature;
+    const directory = (overrides = {}, schema = "https://ifandonlyif.io/schemas/service-receipt-key-directory-v2.json") => ({
+        schema, issuer: "https://ifandonlyif.io", enabled: true,
+        keys: [{
+            key_id: signature.key_id, algorithm: "ML-DSA-65", public_key: signature.public_key,
+            purpose: "service-receipt-signing", status: "current", ...overrides,
+        }],
+    });
+    const verify = (knownDirectory) => verifyServiceReceipt(JSON.stringify(vectorV2.valid.envelope), { now: vectorV2.valid.current_time, knownDirectory });
+    assert.equal((await verify(directory())).issuerTrust, "known");
+    for (const overrides of [{ algorithm: "Ed25519" }, { key_id: `sha256:${"0".repeat(64)}` }, { public_key: signature.public_key.slice(0, -1) + "A" }, { status: "revoked" }]) {
+        assert.equal((await verify(directory(overrides))).issuerTrust, "untrusted", JSON.stringify(overrides));
+    }
+    assert.equal((await verify(directory({}, "https://ifandonlyif.io/schemas/service-receipt-key-directory-v1.json"))).issuerTrust, "untrusted",
+        "a v1 directory cannot recognize an ML-DSA-65 key");
+
+    // The published directory entry with a disagreeing algorithm.
+    const mismatch = vectorV2.negative_cases.find((negative) => negative.directory);
+    const entry = mismatch.directory[0];
+    assert.equal((await verify(directory({ algorithm: entry.algorithm }))).issuerTrust, "untrusted");
+});
+
+test("version and algorithm cannot be mixed", async () => {
+    const mutate = (edit) => { const envelope = JSON.parse(JSON.stringify(vectorV2.valid.envelope)); edit(envelope); return JSON.stringify(envelope); };
+    await assert.rejects(verifyServiceReceipt(mutate((e) => { e.signature.algorithm = "Ed25519"; })), { code: "unsupported_algorithm" });
+    await assert.rejects(verifyServiceReceipt(mutate((e) => { e.schema = RECEIPT_SCHEMA; })), { code: "unsupported_algorithm" });
+    const v1Envelope = JSON.parse(JSON.stringify(vector.valid.envelope));
+    v1Envelope.signature.algorithm = "ML-DSA-65";
+    await assert.rejects(verifyServiceReceipt(JSON.stringify(v1Envelope)), { code: "unsupported_algorithm" });
+    v1Envelope.schema = "https://ifandonlyif.io/schemas/service-receipt-v3.json";
+    await assert.rejects(verifyServiceReceipt(JSON.stringify(v1Envelope)), { code: "unsupported_schema" });
+});
+
+test("ML-DSA-65 wrapper checks sizes exactly and never throws", async () => {
+    const { verifyMLDSA, MLDSA65 } = await import("./ml-dsa-65.mjs");
+    const bytes = (value) => Buffer.from(value, "base64url");
+    const publicKey = bytes(vectorV2.valid.public_key_base64url);
+    const signature = bytes(vectorV2.valid.signature_base64url);
+    const message = Buffer.from(vectorV2.valid.signed_message_hex, "hex");
+    assert.equal(MLDSA65.publicKeySize, 1952);
+    assert.equal(MLDSA65.signatureSize, 3309);
+    assert.equal(verifyMLDSA(new Uint8Array(publicKey), new Uint8Array(message), new Uint8Array(signature)), true);
+    assert.equal(verifyMLDSA(new Uint8Array(publicKey.subarray(1)), new Uint8Array(message), new Uint8Array(signature)), false);
+    assert.equal(verifyMLDSA(new Uint8Array(publicKey), new Uint8Array(message), new Uint8Array(signature.subarray(1))), false);
+    assert.equal(verifyMLDSA(new Uint8Array(publicKey), new Uint8Array(message.subarray(1)), new Uint8Array(signature)), false);
+    assert.equal(verifyMLDSA("x", null, undefined), false);
+});
+
+test("vendored noble files match the SHA-256 table in vendor/noble/NOTICE.md", () => {
+    const notice = readFileSync(new URL("./vendor/noble/NOTICE.md", import.meta.url), "utf8");
+    const rows = [...notice.matchAll(/^\| `([^`]+)` \| `([0-9a-f]{64})` \|$/gm)];
+    assert.equal(rows.length, 10);
+    for (const [, file, digest] of rows) {
+        const bytes = readFileSync(new URL(`./vendor/noble/${file}`, import.meta.url));
+        assert.equal(createHash("sha256").update(bytes).digest("hex"), digest, file);
+    }
 });

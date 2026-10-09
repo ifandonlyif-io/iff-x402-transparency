@@ -1,12 +1,14 @@
-// Package receipt implements the vendor-neutral IFF Service Receipt v1
-// envelope. It intentionally depends only on the Go standard library so a
-// verifier can be embedded without importing the IFF server or its runtime
-// dependencies.
+// Package receipt implements the IFF Service Receipt envelopes. Version 2
+// (ML-DSA-65) is issued; versions 1 (Ed25519) and 2 are both verified. It
+// intentionally depends only on the Go standard library (Go 1.27 or later, for
+// crypto/mldsa) so the experimental artifact can be verified without importing
+// the IFF server or its runtime dependencies.
 package receipt
 
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/mldsa"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -21,18 +23,39 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
-	// Schema identifies both the signed payload and its detached envelope.
-	Schema = "https://ifandonlyif.io/schemas/service-receipt-v1.json"
+	// SchemaV1 and SchemaV2 identify both the signed payload and its detached
+	// envelope. The schema decides the version and, with it, the algorithm.
+	SchemaV1 = "https://ifandonlyif.io/schemas/service-receipt-v1.json"
+	SchemaV2 = "https://ifandonlyif.io/schemas/service-receipt-v2.json"
 
-	Algorithm = "Ed25519"
+	// Schema is the schema of newly issued receipts.
+	Schema = SchemaV2
 
-	// Domain is hashed with the canonical payload before Ed25519 signing. It
-	// prevents a signature made for another IFF artifact from being accepted
-	// as a service receipt.
-	Domain = "iff-service-receipt/v1\n"
+	AlgorithmEd25519 = "Ed25519"
+	AlgorithmMLDSA65 = "ML-DSA-65"
+	// Algorithm is the algorithm of newly issued receipts.
+	Algorithm = AlgorithmMLDSA65
+
+	// DomainV1 is hashed with the canonical payload before Ed25519 signing.
+	// DomainV2 is the line prepended to the payload digest to form the
+	// ML-DSA-65 message. Each prevents a signature made for another IFF
+	// artifact from being accepted as a service receipt.
+	DomainV1 = "iff-service-receipt/v1\n"
+	DomainV2 = "iff-service-receipt/v2\n"
+	Domain   = DomainV2
+
+	// KeyDirectorySchemaV2 identifies the v2 issuer key directory.
+	KeyDirectorySchemaV2 = "https://ifandonlyif.io/schemas/service-receipt-key-directory-v2.json"
+
+	ed25519PublicKeySize = ed25519.PublicKeySize
+	ed25519SignatureSize = ed25519.SignatureSize
+	mldsa65PublicKeySize = 1952
+	mldsa65SignatureSize = 3309
+	seedEncodedLength    = 43
 
 	requestHashDomain = "iff-service-receipt/request/v1\n"
 	subjectHashDomain = "iff-service-receipt/subject/v1\n"
@@ -54,9 +77,9 @@ var (
 	rawBase64URL         = base64.RawURLEncoding.Strict()
 )
 
-// Envelope carries canonical payload bytes and a detached Ed25519 signature.
+// Envelope carries canonical payload bytes and a detached signature.
 // Payload and all key material use unpadded base64url so the same bytes can be
-// copied through URLs, JSON, terminals, and smart-contract tooling unchanged.
+// copied through URLs, JSON, and terminals unchanged.
 type Envelope struct {
 	Schema        string    `json:"schema"`
 	Payload       string    `json:"payload"`
@@ -75,6 +98,7 @@ type Signature struct {
 // rotation overlap lists.
 type PublicKey struct {
 	KeyID     string
+	Algorithm string
 	Base64URL string
 }
 
@@ -111,10 +135,9 @@ type EvidenceBinding struct {
 	STHSHA256Hash string `json:"sth_sha256_hash"`
 }
 
-// ComputeProof reserves the provider-neutral extension point. The base v1
-// verifier binds these bytes to the receipt but does not validate a provider's
-// proof system; callers must use a matching proof adapter before treating it
-// as evidence of a particular execution environment.
+// ComputeProof is retained as part of the fixed v1 wire format. The current
+// IFF issuer leaves it null, and the base verifier only binds a non-null
+// descriptor's bytes; it does not validate an external proof system.
 type ComputeProof struct {
 	Type           string `json:"type"`
 	Provider       string `json:"provider"`
@@ -123,9 +146,11 @@ type ComputeProof struct {
 	Verifier       string `json:"verifier"`
 }
 
+// Signer signs Service Receipt v2 envelopes with ML-DSA-65. There is no
+// Ed25519 signer: v1 receipts are verified but never issued.
 type Signer struct {
-	privateKey ed25519.PrivateKey
-	publicKey  ed25519.PublicKey
+	privateKey *mldsa.PrivateKey
+	publicKey  []byte
 }
 
 // Verification separates cryptographic integrity from issuer trust and
@@ -134,6 +159,7 @@ type Signer struct {
 type Verification struct {
 	Payload            Payload `json:"payload"`
 	PayloadSHA256      string  `json:"payload_sha256"`
+	Algorithm          string  `json:"algorithm"`
 	KeyID              string  `json:"key_id"`
 	SignatureValid     bool    `json:"signature_valid"`
 	IssuerTrusted      bool    `json:"issuer_trusted"`
@@ -157,47 +183,42 @@ type VerifyOptions struct {
 	ClockSkew      time.Duration
 }
 
-// ValidateUniqueJSON rejects malformed JSON and duplicate object keys at any
-// depth. Service adapters and CLIs use it before extracting an embedded
-// envelope so last-key-wins parsing cannot hide substitutions.
+// ValidateUniqueJSON rejects malformed or non-interoperable UTF-8 JSON and
+// duplicate object keys at any depth. Service adapters and CLIs use it before
+// extracting an embedded envelope so decoder replacement and last-key-wins
+// parsing cannot hide substitutions.
 func ValidateUniqueJSON(raw []byte) error {
+	if !utf8.Valid(raw) {
+		return errors.New("JSON must be valid UTF-8")
+	}
+	if !hasOnlyPairedJSONSurrogates(raw) {
+		return errors.New("JSON strings must not contain unpaired Unicode surrogates")
+	}
 	return rejectDuplicateJSONKeys(raw)
 }
 
-// NewSigner loads an unpadded/padded base64 or base64url Ed25519 seed/private
-// key. An empty value creates a disabled signer, which keeps receipt issuance
-// opt-in at deployment time.
-func NewSigner(encodedPrivateKey string) (*Signer, error) {
-	encodedPrivateKey = strings.TrimSpace(encodedPrivateKey)
-	if encodedPrivateKey == "" {
+// NewSigner loads a 32-byte ML-DSA-65 seed written as canonical unpadded
+// base64url (exactly 43 characters). An empty value creates a disabled signer,
+// which keeps receipt issuance opt-in at deployment time. Errors never contain
+// the value.
+func NewSigner(encodedSeed string) (*Signer, error) {
+	if encodedSeed == "" {
 		return &Signer{}, nil
 	}
-	raw, err := decodeAnyBase64(encodedPrivateKey)
+	seed, err := rawBase64URL.DecodeString(encodedSeed)
+	if err != nil || len(encodedSeed) != seedEncodedLength || len(seed) != mldsa.PrivateKeySize ||
+		rawBase64URL.EncodeToString(seed) != encodedSeed {
+		return nil, errors.New("signing key must be a 32-byte ML-DSA-65 seed as canonical unpadded base64url (43 characters)")
+	}
+	privateKey, err := mldsa.NewPrivateKey(mldsa.MLDSA65(), seed)
 	if err != nil {
-		return nil, fmt.Errorf("decode signing key: %w", err)
+		return nil, errors.New("invalid ML-DSA-65 seed")
 	}
-	var privateKey ed25519.PrivateKey
-	switch len(raw) {
-	case ed25519.SeedSize:
-		privateKey = ed25519.NewKeyFromSeed(raw)
-	case ed25519.PrivateKeySize:
-		expanded := ed25519.NewKeyFromSeed(raw[:ed25519.SeedSize])
-		if !bytes.Equal(expanded, raw) {
-			return nil, errors.New("expanded Ed25519 private key has an inconsistent public half")
-		}
-		privateKey = append(ed25519.PrivateKey(nil), expanded...)
-	default:
-		return nil, fmt.Errorf("signing key must decode to %d-byte seed or %d-byte private key", ed25519.SeedSize, ed25519.PrivateKeySize)
-	}
-	publicKey, ok := privateKey.Public().(ed25519.PublicKey)
-	if !ok || len(publicKey) != ed25519.PublicKeySize {
-		return nil, errors.New("derive Ed25519 public key")
-	}
-	return &Signer{privateKey: privateKey, publicKey: append(ed25519.PublicKey(nil), publicKey...)}, nil
+	return &Signer{privateKey: privateKey, publicKey: privateKey.PublicKey().Bytes()}, nil
 }
 
 func (signer *Signer) Enabled() bool {
-	return signer != nil && len(signer.privateKey) == ed25519.PrivateKeySize
+	return signer != nil && signer.privateKey != nil
 }
 
 func (signer *Signer) PublicKeyBase64URL() string {
@@ -223,6 +244,10 @@ func NewPayload(
 	requestProjection, subject []byte,
 	evidence *EvidenceBinding,
 ) (Payload, error) {
+	normalizedIssuer, err := NormalizeIssuer(issuer)
+	if err != nil {
+		return Payload{}, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
+	}
 	receiptID, err := newReceiptID()
 	if err != nil {
 		return Payload{}, err
@@ -232,7 +257,7 @@ func NewPayload(
 	payload := Payload{
 		Schema:           Schema,
 		ReceiptID:        receiptID,
-		Issuer:           strings.TrimRight(strings.TrimSpace(issuer), "/"),
+		Issuer:           normalizedIssuer,
 		Service:          service,
 		IssuedAt:         FormatTimestamp(issuedAt),
 		ExpiresAt:        FormatTimestamp(expiresAt),
@@ -244,17 +269,24 @@ func NewPayload(
 		Evidence:         evidence,
 		ComputeProof:     nil,
 	}
-	if err := validatePayload(payload); err != nil {
+	if err := validatePayload(payload, Schema); err != nil {
 		return Payload{}, err
 	}
 	return payload, nil
 }
 
+// Sign issues a Service Receipt v2 envelope (hedged ML-DSA-65, empty context).
 func (signer *Signer) Sign(payload Payload) (Envelope, error) {
+	return signer.sign(payload, false)
+}
+
+// sign is Sign with an optional deterministic mode that exists only so the
+// published test vectors can be reproduced byte for byte.
+func (signer *Signer) sign(payload Payload, deterministic bool) (Envelope, error) {
 	if !signer.Enabled() {
 		return Envelope{}, ErrDisabled
 	}
-	if err := validatePayload(payload); err != nil {
+	if err := validatePayload(payload, SchemaV2); err != nil {
 		return Envelope{}, err
 	}
 	payloadBytes, err := json.Marshal(payload)
@@ -265,14 +297,22 @@ func (signer *Signer) Sign(payload Payload) (Envelope, error) {
 		return Envelope{}, fmt.Errorf("%w: payload exceeds %d bytes", ErrInvalidPayload, maxPayloadBytes)
 	}
 	payloadHash := sha256.Sum256(payloadBytes)
-	signingDigest := signingDigest(payloadBytes)
-	signature := ed25519.Sign(signer.privateKey, signingDigest[:])
+	message := signingMessageV2(payloadBytes)
+	var signature []byte
+	if deterministic {
+		signature, err = signer.privateKey.SignDeterministic(message, &mldsa.Options{})
+	} else {
+		signature, err = signer.privateKey.Sign(rand.Reader, message, &mldsa.Options{})
+	}
+	if err != nil {
+		return Envelope{}, fmt.Errorf("sign receipt: %w", err)
+	}
 	return Envelope{
-		Schema:        Schema,
+		Schema:        SchemaV2,
 		Payload:       rawBase64URL.EncodeToString(payloadBytes),
 		PayloadSHA256: hex.EncodeToString(payloadHash[:]),
 		Signature: Signature{
-			Algorithm: Algorithm,
+			Algorithm: AlgorithmMLDSA65,
 			KeyID:     signer.KeyID(),
 			PublicKey: signer.PublicKeyBase64URL(),
 			Value:     rawBase64URL.EncodeToString(signature),
@@ -285,7 +325,7 @@ func VerifyJSON(raw []byte, options VerifyOptions) (Verification, error) {
 	if len(raw) == 0 || len(raw) > maxEnvelopeBytes {
 		return Verification{}, fmt.Errorf("%w: envelope size is invalid", ErrInvalidEnvelope)
 	}
-	if err := rejectDuplicateJSONKeys(raw); err != nil {
+	if err := ValidateUniqueJSON(raw); err != nil {
 		return Verification{}, fmt.Errorf("%w: %v", ErrInvalidEnvelope, err)
 	}
 	if err := validateEnvelopePropertyNames(raw); err != nil {
@@ -302,11 +342,19 @@ func VerifyJSON(raw []byte, options VerifyOptions) (Verification, error) {
 // state. It never treats an embedded public key or compute-proof descriptor as
 // proof of issuer identity or execution environment.
 func Verify(envelope Envelope, options VerifyOptions) (Verification, error) {
-	if envelope.Schema != Schema {
+	// The schema decides the version; the algorithm must match it.
+	var algorithm string
+	var publicKeySize, signatureSize int
+	switch envelope.Schema {
+	case SchemaV1:
+		algorithm, publicKeySize, signatureSize = AlgorithmEd25519, ed25519PublicKeySize, ed25519SignatureSize
+	case SchemaV2:
+		algorithm, publicKeySize, signatureSize = AlgorithmMLDSA65, mldsa65PublicKeySize, mldsa65SignatureSize
+	default:
 		return Verification{}, ErrUnsupportedSchema
 	}
-	if envelope.Signature.Algorithm != Algorithm {
-		return Verification{}, fmt.Errorf("%w: unsupported signature algorithm", ErrInvalidEnvelope)
+	if envelope.Signature.Algorithm != algorithm {
+		return Verification{}, fmt.Errorf("%w: signature algorithm must be %s for this schema", ErrInvalidEnvelope, algorithm)
 	}
 	payloadBytes, err := rawBase64URL.DecodeString(envelope.Payload)
 	if err != nil || len(payloadBytes) == 0 || len(payloadBytes) > maxPayloadBytes {
@@ -319,20 +367,19 @@ func Verify(envelope Envelope, options VerifyOptions) (Verification, error) {
 	}
 
 	publicKey, err := rawBase64URL.DecodeString(envelope.Signature.PublicKey)
-	if err != nil || len(publicKey) != ed25519.PublicKeySize {
-		return Verification{}, fmt.Errorf("%w: public_key must be a 32-byte base64url Ed25519 key", ErrInvalidEnvelope)
+	if err != nil || len(publicKey) != publicKeySize {
+		return Verification{}, fmt.Errorf("%w: public_key must be a %d-byte base64url %s key", ErrInvalidEnvelope, publicKeySize, algorithm)
 	}
 	keyID := KeyID(publicKey)
 	if envelope.Signature.KeyID != keyID {
 		return Verification{}, fmt.Errorf("%w: key_id mismatch", ErrInvalidEnvelope)
 	}
 	signature, err := rawBase64URL.DecodeString(envelope.Signature.Value)
-	if err != nil || len(signature) != ed25519.SignatureSize {
-		return Verification{}, fmt.Errorf("%w: value must be a 64-byte base64url Ed25519 signature", ErrInvalidEnvelope)
+	if err != nil || len(signature) != signatureSize {
+		return Verification{}, fmt.Errorf("%w: value must be a %d-byte base64url %s signature", ErrInvalidEnvelope, signatureSize, algorithm)
 	}
-	digest := signingDigest(payloadBytes)
-	if !ed25519.Verify(ed25519.PublicKey(publicKey), digest[:], signature) {
-		return Verification{}, ErrInvalidSignature
+	if err := verifySignature(algorithm, publicKey, payloadBytes, signature); err != nil {
+		return Verification{}, err
 	}
 
 	var payload Payload
@@ -346,7 +393,10 @@ func Verify(envelope Envelope, options VerifyOptions) (Verification, error) {
 	if err != nil || !bytes.Equal(canonical, payloadBytes) {
 		return Verification{}, fmt.Errorf("%w: payload is not the canonical fixed-order JSON encoding", ErrInvalidPayload)
 	}
-	if err := validatePayload(payload); err != nil {
+	if payload.Schema != envelope.Schema {
+		return Verification{}, fmt.Errorf("%w: payload schema does not match envelope schema", ErrUnsupportedSchema)
+	}
+	if err := validatePayload(payload, envelope.Schema); err != nil {
 		return Verification{}, err
 	}
 	subject, _ := rawBase64URL.DecodeString(payload.Subject)
@@ -364,6 +414,7 @@ func Verify(envelope Envelope, options VerifyOptions) (Verification, error) {
 	result := Verification{
 		Payload:        payload,
 		PayloadSHA256:  payloadHashHex,
+		Algorithm:      algorithm,
 		KeyID:          keyID,
 		SignatureValid: true,
 		IssuerTrusted: options.ExpectedIssuer != "" && payload.Issuer == options.ExpectedIssuer &&
@@ -387,6 +438,28 @@ func FormatTimestamp(value time.Time) string {
 	return value.UTC().Format(TimestampLayout)
 }
 
+// NormalizeIssuer applies the service-adapter input normalization used before
+// an issuer is signed, then requires the result to be a canonical issuer.
+// This preserves the established acceptance of surrounding whitespace and
+// trailing slashes without allowing noncanonical signed issuer bytes.
+func NormalizeIssuer(value string) (string, error) {
+	normalized := strings.TrimRight(strings.TrimSpace(value), "/")
+	if err := ValidateIssuer(normalized); err != nil {
+		return "", err
+	}
+	return normalized, nil
+}
+
+// ValidateIssuer requires the canonical receipt issuer form: an HTTPS origin,
+// or a loopback HTTP origin for local development, with no credentials, path,
+// query, fragment, default port, uppercase host, or noncanonical IP spelling.
+func ValidateIssuer(value string) error {
+	if !validIssuer(value) {
+		return errors.New("issuer must be a canonical HTTPS origin or loopback HTTP origin")
+	}
+	return nil
+}
+
 // ValidateNonce applies the portable v1 nonce grammar used by service
 // adapters: 1-128 ASCII letters, digits, hyphen, underscore, dot, or colon.
 func ValidateNonce(value string) error {
@@ -396,20 +469,38 @@ func ValidateNonce(value string) error {
 	return nil
 }
 
+// AlgorithmForPublicKey selects the algorithm from the exact raw key length.
+func AlgorithmForPublicKey(raw []byte) (string, error) {
+	switch len(raw) {
+	case ed25519PublicKeySize:
+		return AlgorithmEd25519, nil
+	case mldsa65PublicKeySize:
+		return AlgorithmMLDSA65, nil
+	}
+	return "", errors.New("public key must decode to 32 Ed25519 bytes or 1952 ML-DSA-65 bytes")
+}
+
 func KeyID(publicKey []byte) string {
 	digest := sha256.Sum256(publicKey)
 	return "sha256:" + hex.EncodeToString(digest[:])
 }
 
 // ParsePublicKey accepts padded/unpadded standard or URL-safe base64 and
-// returns the one canonical unpadded base64url representation.
+// returns the one canonical unpadded base64url representation. The algorithm
+// is selected from the decoded length only: 32 bytes is Ed25519, 1952 bytes is
+// ML-DSA-65, anything else is rejected.
 func ParsePublicKey(encoded string) (PublicKey, error) {
 	raw, err := decodeAnyBase64(strings.TrimSpace(encoded))
-	if err != nil || len(raw) != ed25519.PublicKeySize {
-		return PublicKey{}, errors.New("public key must decode to 32 Ed25519 bytes")
+	if err != nil {
+		return PublicKey{}, errors.New("public key must decode to 32 Ed25519 bytes or 1952 ML-DSA-65 bytes")
+	}
+	algorithm, err := AlgorithmForPublicKey(raw)
+	if err != nil {
+		return PublicKey{}, err
 	}
 	return PublicKey{
 		KeyID:     KeyID(raw),
+		Algorithm: algorithm,
 		Base64URL: rawBase64URL.EncodeToString(raw),
 	}, nil
 }
@@ -443,7 +534,7 @@ func (verification Verification) SubjectMatches(candidate []byte) bool {
 // response, where removing service_receipt necessarily changes field order.
 // Duplicate keys are rejected on both sides before semantic comparison.
 func (verification Verification) SubjectMatchesJSON(candidate []byte) bool {
-	if rejectDuplicateJSONKeys(verification.Subject) != nil || rejectDuplicateJSONKeys(candidate) != nil {
+	if ValidateUniqueJSON(verification.Subject) != nil || ValidateUniqueJSON(candidate) != nil {
 		return false
 	}
 	left, err := decodeJSONValue(verification.Subject)
@@ -454,22 +545,50 @@ func (verification Verification) SubjectMatchesJSON(candidate []byte) bool {
 	return err == nil && reflect.DeepEqual(left, right)
 }
 
+// signingDigest is the v1 Ed25519 message: SHA-256(DomainV1 || payload).
 func signingDigest(payload []byte) [sha256.Size]byte {
-	input := make([]byte, 0, len(Domain)+len(payload))
-	input = append(input, Domain...)
+	input := make([]byte, 0, len(DomainV1)+len(payload))
+	input = append(input, DomainV1...)
 	input = append(input, payload...)
 	return sha256.Sum256(input)
 }
 
-func validatePayload(payload Payload) error {
-	if payload.Schema != Schema {
+// signingMessageV2 is the v2 ML-DSA-65 message: DomainV2 || SHA-256(payload).
+func signingMessageV2(payload []byte) []byte {
+	digest := sha256.Sum256(payload)
+	message := make([]byte, 0, len(DomainV2)+len(digest))
+	message = append(message, DomainV2...)
+	return append(message, digest[:]...)
+}
+
+func verifySignature(algorithm string, publicKey, payload, signature []byte) error {
+	switch algorithm {
+	case AlgorithmEd25519:
+		digest := signingDigest(payload)
+		if ed25519.Verify(ed25519.PublicKey(publicKey), digest[:], signature) {
+			return nil
+		}
+	case AlgorithmMLDSA65:
+		key, err := mldsa.NewPublicKey(mldsa.MLDSA65(), publicKey)
+		if err != nil {
+			return fmt.Errorf("%w: public_key is not a valid ML-DSA-65 key", ErrInvalidEnvelope)
+		}
+		if mldsa.Verify(key, signingMessageV2(payload), signature, &mldsa.Options{}) == nil {
+			return nil
+		}
+	}
+	return ErrInvalidSignature
+}
+
+func validatePayload(payload Payload, schema string) error {
+	if payload.Schema != schema {
 		return ErrUnsupportedSchema
 	}
 	if !validReceiptID(payload.ReceiptID) {
 		return fmt.Errorf("%w: receipt_id is invalid", ErrInvalidPayload)
 	}
-	if !validIssuer(payload.Issuer) {
-		return fmt.Errorf("%w: issuer must be an HTTPS origin", ErrInvalidPayload)
+	if err := ValidateIssuer(payload.Issuer); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidPayload, err)
 	}
 	if !validService(payload.Service) {
 		return fmt.Errorf("%w: service is invalid", ErrInvalidPayload)
@@ -492,8 +611,9 @@ func validatePayload(payload Payload) error {
 		return fmt.Errorf("%w: unsupported subject_media_type", ErrInvalidPayload)
 	}
 	subject, err := rawBase64URL.DecodeString(payload.Subject)
-	if err != nil || len(subject) == 0 || len(subject) > maxSubjectBytes || !json.Valid(subject) {
-		return fmt.Errorf("%w: subject must be bounded base64url JSON", ErrInvalidPayload)
+	if err != nil || len(subject) == 0 || len(subject) > maxSubjectBytes ||
+		!utf8.Valid(subject) || !json.Valid(subject) || !hasOnlyPairedJSONSurrogates(subject) {
+		return fmt.Errorf("%w: subject must be bounded, interoperable UTF-8 JSON", ErrInvalidPayload)
 	}
 	if trimmed := bytes.TrimSpace(subject); len(trimmed) == 0 || trimmed[0] != '{' {
 		return fmt.Errorf("%w: subject JSON must be an object", ErrInvalidPayload)
@@ -556,8 +676,21 @@ func validIssuer(raw string) bool {
 	canonicalHostname := strings.ToLower(hostname)
 	if ip := net.ParseIP(hostname); ip != nil {
 		canonicalHostname = ip.String()
+	} else if !validDNSHostname(hostname) || hasIPv4NumberEnding(hostname) {
+		// WHATWG URL parsing treats these as IPv4 candidates (for example
+		// 127.1 or 2130706433), while net/url otherwise leaves them looking
+		// like DNS names. The explicit DNS grammar also rejects host characters
+		// that Go and WHATWG parse differently, such as stray brackets, braces,
+		// backticks, and underscores.
+		return false
 	}
 	port := parsed.Port()
+	if port != "" {
+		parsedPort, portErr := strconv.ParseUint(port, 10, 16)
+		if portErr != nil || strconv.FormatUint(parsedPort, 10) != port {
+			return false
+		}
+	}
 	if (parsed.Scheme == "https" && port == "443") || (parsed.Scheme == "http" && port == "80") {
 		port = ""
 	}
@@ -574,6 +707,56 @@ func validIssuer(raw string) bool {
 		return true
 	}
 	return hostname == "localhost" || (net.ParseIP(hostname) != nil && net.ParseIP(hostname).IsLoopback())
+}
+
+func validDNSHostname(hostname string) bool {
+	if len(hostname) == 0 || len(hostname) > 253 || strings.HasSuffix(hostname, ".") {
+		return false
+	}
+	for _, label := range strings.Split(hostname, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, character := range label {
+			if (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
+				(character >= '0' && character <= '9') || character == '-' {
+				continue
+			}
+			return false
+		}
+	}
+	return true
+}
+
+func hasIPv4NumberEnding(hostname string) bool {
+	trimmed := strings.TrimSuffix(hostname, ".")
+	lastLabel := trimmed
+	if dot := strings.LastIndexByte(trimmed, '.'); dot >= 0 {
+		lastLabel = trimmed[dot+1:]
+	}
+	if lastLabel == "" {
+		return false
+	}
+	if strings.HasPrefix(lastLabel, "0x") || strings.HasPrefix(lastLabel, "0X") {
+		if len(lastLabel) == 2 {
+			// WHATWG's IPv4-number parser treats an empty hexadecimal
+			// payload as zero, so even a bare 0x is not a DNS label.
+			return true
+		}
+		for _, character := range lastLabel[2:] {
+			if !((character >= '0' && character <= '9') ||
+				(character >= 'a' && character <= 'f') || (character >= 'A' && character <= 'F')) {
+				return false
+			}
+		}
+		return true
+	}
+	for _, character := range lastLabel {
+		if character < '0' || character > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func validService(value string) bool {
@@ -611,6 +794,69 @@ func safeCanonicalString(value string) bool {
 		}
 	}
 	return true
+}
+
+// hasOnlyPairedJSONSurrogates rejects the lone UTF-16 surrogate escapes that
+// RFC 8259 identifies as unpredictable between implementations. Literal
+// non-BMP UTF-8 and correctly paired \uD800-\uDBFF + \uDC00-\uDFFF escapes
+// remain valid. Callers run utf8.Valid and json.Valid separately.
+func hasOnlyPairedJSONSurrogates(raw []byte) bool {
+	inString := false
+	for index := 0; index < len(raw); index++ {
+		switch raw[index] {
+		case '"':
+			inString = !inString
+		case '\\':
+			if !inString || index+1 >= len(raw) {
+				continue
+			}
+			if raw[index+1] != 'u' {
+				index++
+				continue
+			}
+			value, ok := jsonHexQuad(raw, index+2)
+			if !ok {
+				continue
+			}
+			switch {
+			case value >= 0xd800 && value <= 0xdbff:
+				if index+11 >= len(raw) || raw[index+6] != '\\' || raw[index+7] != 'u' {
+					return false
+				}
+				low, lowOK := jsonHexQuad(raw, index+8)
+				if !lowOK || low < 0xdc00 || low > 0xdfff {
+					return false
+				}
+				index += 11
+			case value >= 0xdc00 && value <= 0xdfff:
+				return false
+			default:
+				index += 5
+			}
+		}
+	}
+	return true
+}
+
+func jsonHexQuad(raw []byte, start int) (uint16, bool) {
+	if start < 0 || start+4 > len(raw) {
+		return 0, false
+	}
+	var value uint16
+	for _, character := range raw[start : start+4] {
+		value <<= 4
+		switch {
+		case character >= '0' && character <= '9':
+			value |= uint16(character - '0')
+		case character >= 'a' && character <= 'f':
+			value |= uint16(character-'a') + 10
+		case character >= 'A' && character <= 'F':
+			value |= uint16(character-'A') + 10
+		default:
+			return 0, false
+		}
+	}
+	return value, true
 }
 
 func validNonce(value string) bool {

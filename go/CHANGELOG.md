@@ -15,6 +15,12 @@ exists; each entry names the commit it corresponds to.
 
 ### Added
 
+- Service Receipt v2 (ML-DSA-65, `crypto/mldsa`) in `receipt` and
+  `iff-receipt-verify`: the envelope schema selects v1 (Ed25519) or v2, and the
+  CLI output reports `schema` and `algorithm`. v1 receipts still verify.
+  Requires Go 1.27 (`go.mod` is now `go 1.27.0`).
+- Known-answer vector tests for `spec/testdata/service_receipt_v2.json` and the
+  ML-DSA-65 primitive (`internal/mldsavectors`, not part of the public API).
 - The private monitor now imports this module for its production requirement
   fingerprints, making this implementation the source of truth rather than a
   parallel SDK copy.

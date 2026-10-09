@@ -91,6 +91,10 @@ Issuer と完全な key ID を組み合わせて使用してください。日�
 
 `current` は、その日付の snapshot 公開時点で current だったという意味です。旧 snapshot は過去の検証に使えますが、新規 receipt を無期限に自動承認してはなりません。後継を先に公開し、receipt の有効期間と directory cache の有効期間を合計した期間だけ旧鍵を併用し、その後のバージョン付き snapshot で旧鍵を historical/inactive にします。
 
+## ポスト量子署名(profile v2)
+
+[`spec/x402-signatures-ml-dsa-65.md`](spec/x402-signatures-ml-dsa-65.md) は、観測レポートと signed tree head の Ed25519 署名を ML-DSA-65(FIPS 204)に置き換える signature profile v2 を定義し、[Service Receipt v2](spec/service-receipt-v2.md) も同じ規則を使います。検証側は復号した公開鍵の長さ(32 バイトは Ed25519、1952 バイトは ML-DSA-65)だけでアルゴリズムを決め、profile v1 の署名も引き続き有効です。`spec/verify_example.py` は標準ライブラリのみの ML-DSA-65 検証器を含みます。
+
 ## 公開証拠が示すことと、その限界
 
 | 主張 | 公開証拠 | 限界 |
@@ -113,7 +117,7 @@ API server、本番デプロイ設定と secrets、owner/auth state、秘密鍵�
 
 ## 開発
 
-以下はこの repository の checkout で実行してください。現在の CI は Go 1.26.6 と Node.js 24 を使用し、Node.js 22 との互換性も検査します。以下のチェックには Python 3 と npm も必要です。
+以下はこの repository の checkout で実行してください。現在の CI は Go 1.27.2 と Node.js 24 を使用し、Node.js 22 との互換性も検査します。以下のチェックには Python 3 と npm も必要です。
 
 ```bash
 (cd go && go test ./...)

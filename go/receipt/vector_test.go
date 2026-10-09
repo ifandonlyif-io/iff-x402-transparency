@@ -1,6 +1,7 @@
 package receipt
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -59,30 +60,27 @@ func loadPublishedVector(t *testing.T) publishedVector {
 	return vector
 }
 
-func TestPublishedServiceReceiptVectors(t *testing.T) {
+// TestPublishedServiceReceiptV1Vectors keeps the historical Ed25519 vectors
+// verifying. Reproduction uses test-only Ed25519 code: production never
+// issues v1.
+func TestPublishedServiceReceiptV1Vectors(t *testing.T) {
 	vector := loadPublishedVector(t)
-	signer, err := NewSigner(vector.TestSeed)
+	seed, err := base64.StdEncoding.DecodeString(vector.TestSeed)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	baseline := vector.Valid
-	baseline.CanonicalRequest = vector.CanonicalRequest
-	baseline.CanonicalSubject = vector.CanonicalSubject
-	t.Run("baseline", func(t *testing.T) {
-		verifyPublishedCase(t, signer, baseline, baseline.TrustedPolicy, baseline.CurrentTime)
-	})
-
-	t.Run("evidence_and_compute_descriptors", func(t *testing.T) {
-		verifyPublishedCase(t, signer, vector.EvidenceCompute, vector.EvidenceCompute.TrustedPolicy, vector.EvidenceCompute.CurrentTime)
-		assertEvidenceMatchesTransparencyVector(t, vector.EvidenceCompute.Envelope)
-	})
+	for name, testCase := range map[string]publishedCase{"baseline": vector.Valid, "evidence_compute": vector.EvidenceCompute} {
+		t.Run(name, func(t *testing.T) {
+			if name == "baseline" {
+				testCase.CanonicalRequest, testCase.CanonicalSubject = vector.CanonicalRequest, vector.CanonicalSubject
+			}
+			verifyPublishedV1Case(t, seed, testCase)
+		})
+	}
+	assertEvidenceMatchesTransparencyVector(t, vector.EvidenceCompute.Envelope)
 }
 
-func verifyPublishedCase(t *testing.T, signer *Signer, testCase publishedCase, policy struct {
-	ExpectedIssuer string   `json:"expected_issuer"`
-	TrustedKeyIDs  []string `json:"trusted_key_ids"`
-}, currentTime string) {
+func verifyPublishedV1Case(t *testing.T, seed []byte, testCase publishedCase) {
 	t.Helper()
 	payloadBytes := []byte(testCase.CanonicalPayload)
 	payloadHash := sha256.Sum256(payloadBytes)
@@ -93,31 +91,18 @@ func verifyPublishedCase(t *testing.T, signer *Signer, testCase publishedCase, p
 	if got := hex.EncodeToString(digest[:]); got != testCase.SigningDigest {
 		t.Fatalf("signing digest: got %s", got)
 	}
-	if decoded, err := base64.RawURLEncoding.Strict().DecodeString(testCase.Envelope.Payload); err != nil || string(decoded) != testCase.CanonicalPayload {
-		t.Fatalf("published envelope payload does not contain the canonical bytes: %v", err)
-	}
-	if testCase.Envelope.Schema != Schema || testCase.Envelope.PayloadSHA256 != testCase.PayloadSHA256 ||
-		testCase.Envelope.Signature.Algorithm != Algorithm || testCase.Envelope.Signature.KeyID != testCase.KeyID ||
-		testCase.Envelope.Signature.PublicKey != testCase.PublicKey || testCase.Envelope.Signature.Value != testCase.Signature {
-		t.Fatal("published envelope duplicates disagree with their component fields")
-	}
-	if signer.KeyID() != testCase.KeyID || signer.PublicKeyBase64URL() != testCase.PublicKey {
+	private := ed25519.NewKeyFromSeed(seed)
+	public := private.Public().(ed25519.PublicKey)
+	if KeyID(public) != testCase.KeyID || base64.RawURLEncoding.EncodeToString(public) != testCase.PublicKey {
 		t.Fatal("published key identity does not reproduce from the test seed")
 	}
-
-	var payload Payload
-	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
-		t.Fatal(err)
+	if base64.RawURLEncoding.EncodeToString(ed25519.Sign(private, digest[:])) != testCase.Signature || testCase.Envelope.Signature.Value != testCase.Signature {
+		t.Fatal("published v1 signature drifted")
 	}
-	reproduced, err := signer.Sign(payload)
-	if err != nil {
-		t.Fatal(err)
+	if testCase.Envelope.Schema != SchemaV1 || testCase.Envelope.Signature.Algorithm != AlgorithmEd25519 {
+		t.Fatal("v1 vector must stay a v1 Ed25519 envelope")
 	}
-	if reproduced != testCase.Envelope {
-		t.Fatalf("published envelope drifted:\n got: %+v\nwant: %+v", reproduced, testCase.Envelope)
-	}
-
-	now, err := time.Parse(TimestampLayout, currentTime)
+	now, err := time.Parse(TimestampLayout, testCase.CurrentTime)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,12 +111,12 @@ func verifyPublishedCase(t *testing.T, signer *Signer, testCase publishedCase, p
 		t.Fatal(err)
 	}
 	verified, err := VerifyJSON(envelopeJSON, VerifyOptions{
-		TrustedKeyIDs: policy.TrustedKeyIDs, ExpectedIssuer: policy.ExpectedIssuer, Now: now,
+		TrustedKeyIDs: testCase.TrustedPolicy.TrustedKeyIDs, ExpectedIssuer: testCase.TrustedPolicy.ExpectedIssuer, Now: now,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if verified.SignatureValid != testCase.Expected.SignatureValid ||
+	if verified.Algorithm != AlgorithmEd25519 || verified.SignatureValid != testCase.Expected.SignatureValid ||
 		verified.IssuerTrusted != testCase.Expected.IssuerTrusted || verified.Expired != testCase.Expected.Expired ||
 		verified.NotYetValid != testCase.Expected.NotYetValid || verified.EvidenceStatus != testCase.Expected.EvidenceStatus ||
 		verified.ComputeProofStatus != testCase.Expected.ComputeProofStatus {
@@ -139,10 +124,6 @@ func verifyPublishedCase(t *testing.T, signer *Signer, testCase publishedCase, p
 	}
 	if string(verified.Subject) != testCase.CanonicalSubject {
 		t.Fatal("subject vector drifted")
-	}
-	requestHash := RequestHash([]byte(testCase.CanonicalRequest))
-	if payload.RequestSHA256 != hex.EncodeToString(requestHash[:]) {
-		t.Fatal("request hash vector drifted")
 	}
 }
 

@@ -1,5 +1,7 @@
 # IFF Service Receipt v1
 
+> [Service Receipt v2](service-receipt-v2.md) (ML-DSA-65) supersedes this version for issuance. v1 receipts remain verifiable.
+
 Status: implementation specification, 2026-09-01
 License: MIT
 

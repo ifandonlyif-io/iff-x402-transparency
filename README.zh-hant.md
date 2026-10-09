@@ -91,6 +91,10 @@ Issuer 與完整 key ID 必須一起使用。日期檔案是透過此受保護 r
 
 快照中的 `current` 只表示該日期發佈時有效；舊快照可支援歷史查驗，但絕不可自動永久授權新簽發收據。應先發佈後繼金鑰，讓前後金鑰重疊至少「收據生命週期加上 directory 快取生命週期」，再於下一份版本快照將前任標為 historical/inactive。
 
+## 後量子簽章(profile v2)
+
+[`spec/x402-signatures-ml-dsa-65.md`](spec/x402-signatures-ml-dsa-65.md) 定義 signature profile v2:觀測報告與 signed tree head 的 Ed25519 簽章改用 ML-DSA-65(FIPS 204),[Service Receipt v2](spec/service-receipt-v2.md) 沿用相同規則。驗證方只依據解碼後公鑰的長度選擇演算法(32 位元組為 Ed25519,1952 位元組為 ML-DSA-65),profile v1 簽章仍然有效。`spec/verify_example.py` 內含僅用標準函式庫、從零實作的 ML-DSA-65 驗證器。
+
 ## 公開證據能支持哪些聲明
 
 | 聲明 | 公開證據 | 限制 |
@@ -113,7 +117,7 @@ Issuer 與完整 key ID 必須一起使用。日期檔案是透過此受保護 r
 
 ## 開發
 
-在本 repo 的 checkout 執行下列指令。目前 CI 使用 Go 1.26.6 與 Node.js 24，也檢查 Node.js 22 相容性。下列檢查另需 Python 3 與 npm。
+在本 repo 的 checkout 執行下列指令。目前 CI 使用 Go 1.27.2 與 Node.js 24，也檢查 Node.js 22 相容性。下列檢查另需 Python 3 與 npm。
 
 ```bash
 (cd go && go test ./...)

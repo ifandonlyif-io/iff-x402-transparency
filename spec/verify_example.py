@@ -6,7 +6,10 @@ commits to, and one inclusion proof, then independently verifies:
 
   1. The STH's canonical bytes reproduce its own sha256_hash (spec Sec. 5.1).
   2. The STH's log_id is hex(SHA-256(public_key)[:16]) (spec Sec. 5.3).
-  3. The STH's Ed25519 signature over that sha256_hash is valid (Sec. 5.2).
+  3. The STH's signature is valid (Sec. 5.2 for Ed25519, profile v1; for
+     ML-DSA-65, profile v2, see x402-signatures-ml-dsa-65.md Sec. 5). The
+     algorithm is chosen only from the decoded public-key length: 32 bytes is
+     Ed25519, 1952 bytes is ML-DSA-65, anything else is rejected.
   4. Every entry's leaf_hash is SHA-256(0x00 || report_hash) (Sec. 4.2).
   5. The Merkle Tree Hash (Sec. 4.4) recomputed from all leaves equals the
      STH's root_hash.
@@ -53,6 +56,15 @@ from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+# ml_dsa_65.py sits next to this script. Put that directory on sys.path so the
+# import works however the script is started (python3 spec/verify_example.py,
+# python3 -m unittest discover -s spec, or an import from elsewhere).
+_SPEC_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SPEC_DIR not in sys.path:
+    sys.path.insert(0, _SPEC_DIR)
+
+import ml_dsa_65  # noqa: E402  (from-scratch ML-DSA-65 verifier, profile v2)
+
 DEFAULT_BASE_URL = "https://ifandonlyif.io"
 
 # Cloudflare blocks requests whose User-Agent looks like a bare scripting
@@ -73,13 +85,22 @@ ENTRIES_PAGE_SIZE = 1000
 
 # Trust anchors are intentionally carried in the independently distributed
 # verifier, not learned from the same API response whose signature is being
-# checked. The value is SHA-256(raw Ed25519 public key), lowercase hex. A key
+# checked. The value is SHA-256(raw public key), lowercase hex, for either
+# algorithm (Ed25519 or ML-DSA-65). The map holds any number of entries: a key
 # rotation requires a reviewed verifier release that retains old keys for
-# historical checkpoints and adds the new key through a trusted channel.
+# historical checkpoints and adds the new key through a trusted channel. Both
+# production log keys (Ed25519 and ML-DSA-65) are pinned below.
 PRODUCTION_TRUSTED_LOG_KEYS = {
     "e33f4a64fe0ef33fca5cbfddce858667": (
         "e33f4a64fe0ef33fca5cbfddce858667"
         "ee56be6347c6cf7ffcda9d1bceaffe5b"
+    ),
+    # ML-DSA-65 log key (profile v2). The live log publishes its first ML-DSA-65
+    # STH after deployment; until then the latest STH is still Ed25519 and the
+    # entry above verifies it. Mirrored in keys/x402-transparency-production-2026-10-10.json.
+    "1b3b654b7be7df0ce6718148b873c11a": (
+        "1b3b654b7be7df0ce6718148b873c11a"
+        "a6d0486f157e9d9522a2e01a8c217260"
     ),
 }
 
@@ -399,23 +420,88 @@ def _decode_hash(value: object, field_name: str) -> bytes:
         raise ValueError(f"{field_name} must be 64 lowercase hex characters") from exc
 
 
+STH_V2_DOMAIN = b"iff-x402-tree-head/v2\n"
+REPORT_V2_DOMAIN = b"iff-x402-monitor-report/v2\n"
+
+ED25519 = "Ed25519"
+ML_DSA_65 = "ML-DSA-65"
+ED25519_KEY_BYTES, ED25519_SIGNATURE_BYTES = 32, 64
+ML_DSA_65_KEY_BYTES, ML_DSA_65_SIGNATURE_BYTES = ml_dsa_65.PK_BYTES, ml_dsa_65.SIG_BYTES
+
+
+def _decode_base64_canonical(value: object, field_name: str) -> bytes:
+    """Standard padded base64 of any length; rejects non-canonical encodings."""
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name} must be a base64 string")
+    try:
+        decoded = base64.b64decode(value, validate=True)
+    except (ValueError, base64.binascii.Error) as exc:
+        raise ValueError(f"{field_name} is not canonical base64") from exc
+    if base64.b64encode(decoded).decode("ascii") != value:
+        raise ValueError(f"{field_name} is not canonical base64")
+    return decoded
+
+
+def signature_algorithm_for_key(public_key: bytes) -> str:
+    """x402-signatures-ml-dsa-65.md Sec. 3: the algorithm comes only from the
+    exact decoded public-key length. There is no fallback between algorithms."""
+    if len(public_key) == ED25519_KEY_BYTES:
+        return ED25519
+    if len(public_key) == ML_DSA_65_KEY_BYTES:
+        return ML_DSA_65
+    raise ValueError(
+        f"public key is {len(public_key)} bytes; expected {ED25519_KEY_BYTES} "
+        f"(Ed25519) or {ML_DSA_65_KEY_BYTES} (ML-DSA-65)"
+    )
+
+
+def _require_matching_algorithm_name(record: dict, field_name: str, algorithm: str) -> None:
+    """The informational algorithm name, when present, must agree with the key."""
+    if field_name in record and record[field_name] != algorithm:
+        raise ValueError(
+            f"{field_name} {record[field_name]!r} disagrees with the "
+            f"{algorithm} public key"
+        )
+
+
+def _verify_signature(
+    algorithm: str, public_key: bytes, signature_b64: object, ed25519_message: bytes,
+    ml_dsa_message: bytes, what: str,
+) -> None:
+    """Checks one signature. Ed25519 signs the bare digest (profile v1);
+    ML-DSA-65 signs domain || digest (profile v2). Raises ValueError."""
+    if algorithm == ED25519:
+        signature = _decode_base64(signature_b64, "signature", ED25519_SIGNATURE_BYTES)
+        ok = ed25519_verify(public_key, ed25519_message, signature)
+    else:
+        signature = _decode_base64(signature_b64, "signature", ML_DSA_65_SIGNATURE_BYTES)
+        ok = ml_dsa_65.verify(public_key, ml_dsa_message, signature)
+    if not ok:
+        raise ValueError(f"{algorithm} signature over the {what} is invalid")
+
+
 def verify_sth(
     sth: dict,
     trusted_log_keys: dict[str, str],
     allow_untrusted_key: bool = False,
 ) -> bytes:
-    """Runs spec Sec. 5.1-5.3's checks. Returns the canonical bytes on
-    success; raises ValueError describing the first failed check."""
+    """Runs spec Sec. 5.1-5.3's checks for either signature profile. Returns the
+    canonical bytes on success; raises ValueError describing the first failed
+    check."""
     canonical_bytes = canonical_sth_bytes(sth)
+    digest = hashlib.sha256(canonical_bytes).digest()
 
-    computed_sha256 = hashlib.sha256(canonical_bytes).hexdigest()
-    if computed_sha256 != sth["sha256_hash"]:
+    # Sec. 5 step 2: sha256_hash is checked when present.
+    if "sha256_hash" in sth and digest.hex() != sth["sha256_hash"]:
         raise ValueError(
-            f"sha256_hash mismatch: computed {computed_sha256}, "
+            f"sha256_hash mismatch: computed {digest.hex()}, "
             f"STH claims {sth['sha256_hash']}"
         )
 
-    public_key = _decode_base64(sth["public_key"], "public_key", 32)
+    public_key = _decode_base64_canonical(sth["public_key"], "public_key")
+    algorithm = signature_algorithm_for_key(public_key)
+    _require_matching_algorithm_name(sth, "signature_algorithm", algorithm)
+
     public_key_sha256 = hashlib.sha256(public_key).hexdigest()
     expected_log_id = public_key_sha256[:32]
     if expected_log_id != sth["log_id"]:
@@ -437,12 +523,126 @@ def verify_sth(
             f"computed {public_key_sha256}, trusted {trusted_fingerprint}"
         )
 
-    signature = _decode_base64(sth["signature"], "signature", 64)
-    digest = hashlib.sha256(canonical_bytes).digest()
-    if not ed25519_verify(public_key, digest, signature):
-        raise ValueError("Ed25519 signature over the STH's sha256_hash is invalid")
-
+    _verify_signature(
+        algorithm, public_key, sth["signature"], digest,
+        STH_V2_DOMAIN + digest, "STH's sha256_hash",
+    )
     return canonical_bytes
+
+
+def verify_monitor_report_signature(
+    canonical_report_json: str,
+    report_hash: str,
+    public_key_b64: str,
+    signature_b64: str,
+    algorithm_name: str | None = None,
+) -> str:
+    """Spec Sec. 3 (profile v1) and x402-signatures-ml-dsa-65.md Sec. 4
+    (profile v2). Checks the report's SHA-256 against report_hash, then the
+    signature, with the algorithm chosen from the key length. When the canonical
+    JSON carries monitor_public_key it must equal public_key_b64. Returns the
+    algorithm name; raises ValueError otherwise."""
+    if not isinstance(canonical_report_json, str):
+        raise ValueError("canonical_report_json must be a string")
+    digest = hashlib.sha256(canonical_report_json.encode("utf-8")).digest()
+    if digest.hex() != report_hash:
+        raise ValueError(f"report_hash mismatch: computed {digest.hex()}, report claims {report_hash}")
+    public_key = _decode_base64_canonical(public_key_b64, "monitor_public_key")
+    algorithm = signature_algorithm_for_key(public_key)
+    if algorithm_name is not None and algorithm_name != algorithm:
+        raise ValueError(
+            f"monitor_signature_algorithm {algorithm_name!r} disagrees with the "
+            f"{algorithm} public key"
+        )
+    try:
+        embedded = json.loads(canonical_report_json).get("monitor_public_key")
+    except (json.JSONDecodeError, AttributeError) as exc:
+        raise ValueError("canonical_report_json is not a JSON object") from exc
+    if embedded is not None and embedded != public_key_b64:
+        raise ValueError("monitor_public_key inside the report differs from the signing key")
+    _verify_signature(
+        algorithm, public_key, signature_b64, digest,
+        REPORT_V2_DOMAIN + digest, "report's SHA-256 digest",
+    )
+    return algorithm
+
+
+# ---------------------------------------------------------------------------
+# Signature profile v2 vector checks (x402-signatures-ml-dsa-65.md Sec. 8)
+# ---------------------------------------------------------------------------
+
+_NEGATIVE_META_KEYS = ("name", "target", "expected_error")
+
+
+def _check_signed_message(record: dict, domain: bytes, digest: bytes) -> None:
+    """Vector-level consistency: the recorded domain line and exact signed
+    message M must be the ones the spec requires for this artifact."""
+    if record.get("domain") != domain.decode("ascii"):
+        raise ValueError(f"domain {record.get('domain')!r} is not {domain!r}")
+    if record.get("signed_message_hex") != (domain + digest).hex():
+        raise ValueError("signed_message_hex is not domain || SHA-256 digest")
+
+
+def verify_sth_vector(record: dict, trusted_log_keys: dict[str, str], allow_untrusted_key: bool) -> None:
+    """Verifies one signed_tree_head vector record. Raises ValueError."""
+    sth = {
+        "log_id": record["log_id"],
+        "tree_size": record["tree_size"],
+        "timestamp": record["timestamp"],
+        "root_hash": record["root_hash"],
+        "sha256_hash": record["sha256_hash"],
+        "public_key": record["public_key_base64"],
+        "signature": record["signature_base64"],
+    }
+    if "signature_algorithm" in record:
+        sth["signature_algorithm"] = record["signature_algorithm"]
+    canonical = verify_sth(sth, trusted_log_keys, allow_untrusted_key)
+    if record.get("canonical_bytes") != canonical.decode("utf-8"):
+        raise ValueError("canonical_bytes does not match the STH fields")
+    _check_signed_message(record, STH_V2_DOMAIN, hashlib.sha256(canonical).digest())
+
+
+def verify_report_vector(record: dict) -> None:
+    """Verifies one monitor_report vector record. Raises ValueError."""
+    verify_monitor_report_signature(
+        record["canonical_report_json"],
+        record["report_hash"],
+        record["public_key_base64"],
+        record["signature_base64"],
+        record.get("monitor_signature_algorithm"),
+    )
+    digest = hashlib.sha256(record["canonical_report_json"].encode("utf-8")).digest()
+    _check_signed_message(record, REPORT_V2_DOMAIN, digest)
+
+
+def verify_signature_vectors_v2(doc: dict) -> tuple[int, int]:
+    """Verifies the positive STH and report vectors and every negative case.
+    A negative case passes when verification rejects it; it is run with the
+    most permissive trust setting (the baseline key pinned, unknown keys
+    allowed) so structural checks, not the trust anchor, must reject it.
+    Returns (positive_count, negative_count); raises ValueError on a failure."""
+    base_sth, base_report = doc["signed_tree_head"], doc["monitor_report"]
+    base_key = _decode_base64_canonical(base_sth["public_key_base64"], "public_key_base64")
+    fingerprint = hashlib.sha256(base_key).hexdigest()
+    pinned = {fingerprint[:32]: fingerprint}
+
+    verify_sth_vector(base_sth, pinned, False)
+    verify_report_vector(base_report)
+    negatives = doc.get("negative_cases", [])
+    for case in negatives:
+        name = case.get("name", "<unnamed>")
+        if case.get("target") not in ("signed_tree_head", "monitor_report"):
+            raise ValueError(f"negative case {name}: unknown target {case.get('target')!r}")
+        overrides = {k: v for k, v in case.items() if k not in _NEGATIVE_META_KEYS}
+        try:
+            if case["target"] == "signed_tree_head":
+                verify_sth_vector({**base_sth, **overrides}, pinned, True)
+            else:
+                verify_report_vector({**base_report, **overrides})
+        except (ValueError, KeyError, TypeError):
+            continue
+        raise ValueError(f"negative case {name} was accepted")
+    return 2, len(negatives)
 
 
 # ---------------------------------------------------------------------------
@@ -592,7 +792,8 @@ def run_against_api(
     root_hash = _decode_hash(sth["root_hash"], "root_hash")
     print(f"  [OK] canonical bytes reproduce sha256_hash {sth['sha256_hash']}")
     print(f"  [OK] log_id = hex(sha256(public_key)[:16]) = {sth['log_id']}")
-    print(f"  [OK] Ed25519 signature valid under a pinned public-key fingerprint")
+    algorithm = signature_algorithm_for_key(_decode_base64_canonical(sth["public_key"], "public_key"))
+    print(f"  [OK] {algorithm} signature valid under a pinned public-key fingerprint")
     print(f"  tree_size = {tree_size}")
 
     previous_sth = None
@@ -734,9 +935,34 @@ def run_self_test() -> None:
         raise ValueError("vector sth_body does not match recomputed canonical bytes")
     print("  [OK] vector signed_tree_head verifies (canonical bytes, log_id, Ed25519 signature)")
 
+    testdata = os.path.join(os.path.dirname(os.path.abspath(__file__)), "testdata")
+
+    primitive_path = os.path.join(testdata, "ml_dsa_65_vectors.json")
+    if os.path.exists(primitive_path):
+        with open(primitive_path, "r", encoding="utf-8") as handle:
+            primitive = json.load(handle)
+        profile = {"signed_tree_head": primitive["profile_v2_examples"]["signed_tree_head"],
+                   "monitor_report": primitive["profile_v2_examples"]["monitor_report"]}
+        verify_signature_vectors_v2(profile)
+        print("  [OK] ml_dsa_65_vectors.json profile v2 STH and monitor report verify (ML-DSA-65)")
+    else:
+        print("  skipped: spec/testdata/ml_dsa_65_vectors.json not present")
+
+    v2_path = os.path.join(testdata, "signature_vectors_v2.json")
+    if os.path.exists(v2_path):
+        with open(v2_path, "r", encoding="utf-8") as handle:
+            v2_doc = json.load(handle)
+        positives, negatives = verify_signature_vectors_v2(v2_doc)
+        print(
+            f"  [OK] signature_vectors_v2.json: {positives} positive vectors verify and "
+            f"{negatives} negative cases are rejected"
+        )
+    else:
+        print("  skipped: spec/testdata/signature_vectors_v2.json not present (profile v2 reference vectors)")
+
     print()
-    print("Self-test passed: this script's Merkle, leaf-hash, and Ed25519")
-    print("logic reproduces every value in log_vectors.json.")
+    print("Self-test passed: this script's Merkle, leaf-hash, Ed25519 and")
+    print("ML-DSA-65 logic reproduces every value in the vector files above.")
 
 
 def main() -> int:

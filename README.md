@@ -5,7 +5,7 @@
 [IFF Monitor](https://ifandonlyif.io/monitor) · [SDK guide](https://ifandonlyif.io/sdk) · [API documentation](https://ifandonlyif.io/docs)
 
 The public, trust-critical verification surface for IFF's x402 requirement
-transparency log and Service Receipt v1: protocol specifications, JSON
+transparency log and Service Receipt (v1 Ed25519, v2 ML-DSA-65): protocol specifications, JSON
 Schemas, known-answer vectors, offline verifiers, and TypeScript and Go
 clients.
 
@@ -47,8 +47,9 @@ payment. Callers keep their own payment policy. Results remain `consistent`,
 - [`spec/x402-requirement-transparency-v1.md`](spec/x402-requirement-transparency-v1.md)
   defines requirement fingerprints, signed tree heads, Merkle inclusion and
   consistency proofs, public fields, and verdict vocabulary.
-- [`spec/service-receipt-v1.md`](spec/service-receipt-v1.md) defines the
-  canonical Service Receipt v1 envelope, payload, domains, trust model,
+- [`spec/service-receipt-v2.md`](spec/service-receipt-v2.md) is the current
+  Service Receipt (ML-DSA-65); [`spec/service-receipt-v1.md`](spec/service-receipt-v1.md) defines the
+  canonical Service Receipt v1 (Ed25519, historical) envelope, payload, domains, trust model,
   expiry semantics, evidence references, and API adapter behavior.
 - [`schemas/`](schemas/) contains JSON Schemas for receipt envelopes and the
   receipt-key directory.
@@ -65,7 +66,9 @@ payment. Callers keep their own payment policy. Results remain `consistent`,
   [`receipt`](go/receipt/) package and offline
   [`iff-receipt-verify`](go/cmd/iff-receipt-verify/) command.
 - [`browser/service-receipt.mjs`](browser/service-receipt.mjs) is a no-DOM,
-  Web Crypto receipt verifier core with Node-based conformance tests.
+  receipt verifier core for v1 (Web Crypto Ed25519) and v2 (ML-DSA-65 through
+  the vendored `@noble/post-quantum`, see [`browser/vendor/noble/NOTICE.md`](browser/vendor/noble/NOTICE.md)),
+  with Node-based conformance tests.
 
 ## Verify independently
 
@@ -108,7 +111,8 @@ Verify a standalone receipt envelope or a complete API response saved as
 (cd go && go run ./cmd/iff-receipt-verify -file ../response.json)
 ```
 
-That checks canonical encoding, hashes, the Ed25519 signature, time state,
+That checks canonical encoding, hashes, the signature (ML-DSA-65 for v2, Ed25519 for historical v1;
+the envelope schema selects the version and the output reports `schema` and `algorithm`), time state,
 and—when a full response is supplied—the signed subject binding. It does not
 establish who controls the embedded key. For issuer identity, additionally
 pass the exact expected issuer and one or more full, independently trusted
@@ -117,6 +121,14 @@ command.
 
 The receipt key directory is useful origin metadata when fetched from the
 exact expected HTTPS issuer. It is not an independently pinned trust anchor.
+
+Since 2026-10-10 the hosted issuer signs Service Receipt v2 with ML-DSA-65. The
+pin is [`keys/service-receipt-production-2026-10-10.json`](keys/service-receipt-production-2026-10-10.json),
+a key directory v2 snapshot: the ML-DSA-65 key is `current`
+(`sha256:70be5c7a580fd0d89b34c4be79ed73fb7036ed3fb696223a1e271f61b9dcc217`) and the
+Ed25519 key below is `previous`. The transparency log and monitor keys (Ed25519 and
+ML-DSA-65) are pinned in
+[`keys/x402-transparency-production-2026-10-10.json`](keys/x402-transparency-production-2026-10-10.json).
 
 The version-controlled production pin first published on 2026-09-01 is archived at
 [`keys/service-receipt-production-2026-09-01.json`](keys/service-receipt-production-2026-09-01.json):
@@ -134,6 +146,10 @@ old snapshot can support historical verification but MUST NOT automatically
 authorize newly issued receipts forever. Publish the successor first, overlap
 the predecessor for the receipt lifetime plus directory-cache lifetime, then
 mark the predecessor historical/inactive in the next versioned snapshot.
+
+## Post-quantum signatures (profile v2)
+
+[`spec/x402-signatures-ml-dsa-65.md`](spec/x402-signatures-ml-dsa-65.md) defines signature profile v2: ML-DSA-65 (FIPS 204) in place of Ed25519 for observation reports and signed tree heads, with [Service Receipt v2](spec/service-receipt-v2.md) using the same rules. A verifier picks the algorithm only from the decoded public-key length (32 bytes is Ed25519, 1952 bytes is ML-DSA-65). Hashes, Merkle proofs and anchoring are unchanged, and profile v1 signatures stay valid. `spec/verify_example.py` includes a standard-library, from-scratch ML-DSA-65 verifier (`spec/ml_dsa_65.py`), checked against vectors generated with Go's `crypto/mldsa` (`spec/testdata/ml_dsa_65_vectors.json`).
 
 ## What this proves—and what it doesn't
 
@@ -168,7 +184,7 @@ reputation. Its Core 0.1 alpha has a separate release and trust policy.
 
 ## Development
 
-Run the following from a checkout of this repository. Current CI uses Go 1.26.6
+Run the following from a checkout of this repository. Current CI uses Go 1.27.2
 and Node.js 24, and also checks Node.js 22 compatibility. Python 3 and npm are
 required for the checks below.
 
@@ -181,7 +197,10 @@ python3 spec/verify_example.py --self-test
 python3 -m unittest discover -s spec -p 'test_*.py' -v
 python3 -m json.tool schemas/service-receipt-v1.json >/dev/null
 python3 -m json.tool schemas/service-receipt-key-directory-v1.json >/dev/null
+python3 -m json.tool schemas/service-receipt-v2.json >/dev/null
+python3 -m json.tool schemas/service-receipt-key-directory-v2.json >/dev/null
 python3 -m json.tool spec/testdata/service_receipt_v1.json >/dev/null
+python3 -m json.tool spec/testdata/service_receipt_v2.json >/dev/null
 ```
 
 See [SECURITY.md](SECURITY.md) for private vulnerability reporting.
