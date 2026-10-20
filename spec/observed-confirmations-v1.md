@@ -334,13 +334,17 @@ verified tier (unchanged per-observation window) and
 For the observed tier, with T and freshness as in §9.1:
 
 ```text
-R = fresh ? now : T
+R = fresh ? max(now, T) : T
 L = R − W
 eligible = valid_requirements episodes with L <= last_valid_at <= R
          ∪ valid_requirements late results with L <= observed_at <= R
 option_union = option fingerprints of the eligible episodes' opening observations (and late results)
 payee_union  = amount-blind payee fingerprints of the same observations
 ```
+
+If the probing worker's clock is ahead of the API's clock, a fresh T can be
+later than now. Using `max(now, T)` keeps that confirmation inside its own
+window without changing its signed timestamp or widening the window beyond W.
 
 An episode whose `last_valid_at` lies in `[L, R]` had at least one confirmation
 in the window, which makes this union equal to a per-probe union without
