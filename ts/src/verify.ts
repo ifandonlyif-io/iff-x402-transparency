@@ -45,6 +45,9 @@ export interface VerifyObservedSummary extends VerifyFingerprintSummary {
   monitor_public_key: string;
   report_hash: string;
   monitor_signature: string;
+  /** Latest effective confirmation of this episode under the observed
+   * profile; observed_at remains the episode opening. Absent on older servers. */
+  last_confirmed_at?: string;
 }
 
 export interface VerifyRequirementHistoryEntry {
@@ -70,6 +73,9 @@ export interface VerifyInclusionSTH {
   public_key: string;
 }
 
+/** Proof under the embedded STH. The observed-confirmation-window/v1 profile
+ * requires the exact episode opening named by observed; the verified
+ * observation-window/v1 profile may prove an older covered observation. */
 export interface VerifyInclusion {
   /** Optional for compatibility with servers deployed before the covered
    * observation fields were added to this block. */
@@ -110,8 +116,16 @@ export interface VerifyResult {
    * exists but has never produced a fingerprint observation, false when the
    * URL has never been seen as an endpoint at all. */
   known?: boolean;
-  /** The newest observation for this endpoint covered by the latest signed
-   * tree head. Its observation_id may differ from observed.observation_id. */
+  /** observation-window/v1 or observed-confirmation-window/v1. Optional to
+   * preserve compatibility with responses from before the observed profile. */
+  comparison_policy?: string;
+  freshness_reason?: string;
+  last_confirmed_at?: string;
+  last_attempt_at?: string;
+  last_attempt_outcome?: string;
+  /** Null until an STH covers eligible evidence. The observed profile must
+   * prove observed's exact episode opening; the verified profile may prove
+   * an older observation. */
   inclusion: VerifyInclusion | null;
   disclaimer: string;
 }

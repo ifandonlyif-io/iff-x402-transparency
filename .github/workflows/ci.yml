@@ -40,6 +40,12 @@ jobs:
           python3 -m json.tool schemas/service-receipt-key-directory-v1.json >/dev/null
           python3 -m json.tool schemas/service-receipt-v2.json >/dev/null
           python3 -m json.tool schemas/service-receipt-key-directory-v2.json >/dev/null
+          python3 -m json.tool schemas/observed-confirmations-v1.json >/dev/null
+          python3 -m json.tool spec/testdata/observed_state_key_vectors.json >/dev/null
+          python3 -m json.tool spec/testdata/observed_document_leaf_vectors.json >/dev/null
+          for vector in spec/testdata/observed_confirmations_v1/*/input.json spec/testdata/observed_confirmations_v1/*/body.json; do
+            python3 -m json.tool "$vector" >/dev/null
+          done
           python3 -m json.tool spec/testdata/service_receipt_v1.json >/dev/null
           python3 -m json.tool spec/testdata/service_receipt_v2.json >/dev/null
           python3 -m json.tool spec/testdata/signature_vectors_v2.json >/dev/null
@@ -67,6 +73,9 @@ jobs:
           npm test
           npm run build
           npm pack --dry-run
+
+      - name: Validate observed document schema and negative cases
+        run: node --test spec/observed-schema.test.mjs
 
   node-22-compatibility:
     name: Node 22 compatibility

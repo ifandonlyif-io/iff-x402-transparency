@@ -1,0 +1,37 @@
+{
+  "description": "iff-observed-confirmations/v1 confirmation_document leaf vectors (docs/spec/observed-confirmations-v1.md section 5). leaf_data = UTF8(leaf_data_prefix) || document_hash bytes (30 + 32 = 62 bytes); leaf_hash = SHA-256(0x00 || leaf_data). Computed with Python hashlib, independently of the Go implementation.",
+  "leaf_data_prefix": "iff-observed-confirmations/v1\n",
+  "leaf_data_length": 62,
+  "vectors": [
+    {
+      "name": "all-zero document hash",
+      "document_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "leaf_data": "6966662d6f627365727665642d636f6e6669726d6174696f6e732f76310a0000000000000000000000000000000000000000000000000000000000000000",
+      "leaf_hash": "07f115a9789b65279b77fff94eb3f6722444929d0de868cc71dbbb6eff02a013"
+    },
+    {
+      "name": "SHA-256(\"abc\") document hash",
+      "document_hash": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "leaf_data": "6966662d6f627365727665642d636f6e6669726d6174696f6e732f76310aba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "leaf_hash": "9b632445b3ccc4cfc0a66750a4daa21bb84616bb188a6b033a675060b65b4c46"
+    },
+    {
+      "name": "observed_confirmations_v1/empty_day document",
+      "document_hash": "e8f95967bc628199e241c425e755e8bb7835725a488b04c9970684fa32bd6507",
+      "leaf_data": "6966662d6f627365727665642d636f6e6669726d6174696f6e732f76310ae8f95967bc628199e241c425e755e8bb7835725a488b04c9970684fa32bd6507",
+      "leaf_hash": "202267d7196a3fc71c0821f35a7c82489024e5c15619e1286757d94eb40c3504"
+    },
+    {
+      "name": "observed_confirmations_v1/single_endpoint_two_episodes document",
+      "document_hash": "431de3b6d926a5d256aad208a7c83f6f61dcab26a88d8a454d02c8df997225db",
+      "leaf_data": "6966662d6f627365727665642d636f6e6669726d6174696f6e732f76310a431de3b6d926a5d256aad208a7c83f6f61dcab26a88d8a454d02c8df997225db",
+      "leaf_hash": "6a761e6f4e4deb7ee58076f8010586b82b84c4ae055a8be55d45e931d4636729"
+    },
+    {
+      "name": "observed_confirmations_v1/opted_out_omitted document",
+      "document_hash": "569a546187791c3d19184d0478584f3bdfc9f1ef21e2ca1dbc2b1e58a5a8bed2",
+      "leaf_data": "6966662d6f627365727665642d636f6e6669726d6174696f6e732f76310a569a546187791c3d19184d0478584f3bdfc9f1ef21e2ca1dbc2b1e58a5a8bed2",
+      "leaf_hash": "58e1279213bbe57573a5e640c57a709cb289e127ecb16fea3c0fbbe8153244ed"
+    }
+  ]
+}

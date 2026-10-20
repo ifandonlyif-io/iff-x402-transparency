@@ -62,6 +62,30 @@ const payeeFp = await computePayeeFingerprint(options); // amount-blind: { versi
 The fingerprint implementation is tested against the same conformance vectors
 as IFF's production evidence service.
 
+## Observed comparison profile
+
+These optional fields and the document-leaf helper below are available in this
+checkout; they have not been released in the published `0.2.0` package.
+
+`VerifyResult` exposes optional `comparison_policy`, `freshness_reason`,
+`last_confirmed_at`, `last_attempt_at`, and `last_attempt_outcome` fields.
+`observed.last_confirmed_at` is the latest effective confirmation of the
+episode; `observed.observed_at` still names its opening. Older responses may
+omit these fields. With `observed-confirmation-window/v1`, a non-null
+`inclusion` must prove that exact episode opening; `observation-window/v1`
+for the verified tier may instead prove an older covered observation.
+
+## Confirmation-document leaf hashes
+
+The source includes `documentLeafHash(documentHash: Uint8Array)`, tested against
+[the observed-confirmations vectors](../spec/testdata/observed_document_leaf_vectors.json).
+Pass the 32 raw SHA-256 bytes of the sealed document body. It returns the raw
+32-byte hash `SHA-256(0x00 || UTF8("iff-observed-confirmations/v1\n") || documentHash)`
+and rejects other input lengths. Existing observation leaves are unchanged.
+This helper only computes the leaf binding; verify the document hash, inclusion
+proof, signed tree head, and any claimed anchor separately as described in the
+[observed-confirmations profile](../spec/observed-confirmations-v1.md).
+
 ## MCP server
 
 ```bash

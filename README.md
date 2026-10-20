@@ -47,6 +47,10 @@ payment. Callers keep their own payment policy. Results remain `consistent`,
 - [`spec/x402-requirement-transparency-v1.md`](spec/x402-requirement-transparency-v1.md)
   defines requirement fingerprints, signed tree heads, Merkle inclusion and
   consistency proofs, public fields, and verdict vocabulary.
+- [`spec/observed-confirmations-v1.md`](spec/observed-confirmations-v1.md)
+  extends it with observed-tier episodes, UTC daily documents, document
+  leaves, and the shared D8 freshness rule. Its body schema is
+  [`schemas/observed-confirmations-v1.json`](schemas/observed-confirmations-v1.json).
 - [`spec/service-receipt-v2.md`](spec/service-receipt-v2.md) is the current
   Service Receipt (ML-DSA-65); [`spec/service-receipt-v1.md`](spec/service-receipt-v1.md) defines the
   canonical Service Receipt v1 (Ed25519, historical) envelope, payload, domains, trust model,
@@ -69,6 +73,25 @@ payment. Callers keep their own payment policy. Results remain `consistent`,
   receipt verifier core for v1 (Web Crypto Ed25519) and v2 (ML-DSA-65 through
   the vendored `@noble/post-quantum`, see [`browser/vendor/noble/NOTICE.md`](browser/vendor/noble/NOTICE.md)),
   with Node-based conformance tests.
+
+## Observed-tier daily documents
+
+Observed endpoints can record changes as signed observations and unchanged
+confirmations as episode/day counters. One immutable document per UTC accounting
+day commits those counters through a domain-separated `confirmation_document`
+leaf in the same Merkle tree. `GET /api/v3/evidence/observed-confirmations/{day}`
+(or `/latest`) publishes the body/hash and server-reported `sealed`, `logged`,
+or `anchored` level; `/{day}/body` returns the exact bytes to hash.
+
+The Python verifier in this checkout handles both leaf kinds and requests
+inclusion proofs by leaf hash, including when the final leaf is a document.
+The current Go/TypeScript source also exposes pure document-leaf hash helpers;
+these additions are not in the published `v0.2.0` packages. The shared vectors
+independently check state keys, canonical bodies and document leaves. A schema
+check alone does not establish canonical bytes or counter sums. These are the
+monitor's statistics: they do not prove that every probe ran, the truth of the
+observations, current endpoint state, or payment success. Commitment and anchor
+metadata still require their own proof and trust checks.
 
 ## Verify independently
 
@@ -192,6 +215,7 @@ required for the checks below.
 (cd go && go test ./...)
 (cd go && go vet ./...)
 (cd ts && npm ci && npm test && npm run build)
+node --test spec/observed-schema.test.mjs
 node --test browser/service-receipt.test.mjs
 python3 spec/verify_example.py --self-test
 python3 -m unittest discover -s spec -p 'test_*.py' -v

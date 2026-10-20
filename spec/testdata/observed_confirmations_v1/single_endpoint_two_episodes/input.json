@@ -1,0 +1,39 @@
+{
+  "description": "One endpoint whose URL contains '&' and non-ASCII. A valid_requirements episode opened the day before is confirmed until 14:59, then a non_402 episode opens during the day. Rows are given newest first; the document orders episodes by opened_at. Input times use a +08:00 offset in one place to pin UTC normalization. Two late results with a different state were stored that day but never counted, so uncounted_late_results is 2 while the entry is unaffected.",
+  "day": "2026-10-18",
+  "sealed_at": "2026-10-19T00:10:02.5Z",
+  "monitor_id": "iff-monitor-test",
+  "uncounted_late_results": 2,
+  "rows": [
+    {
+      "url": "https://pay.example/menu&tea/café",
+      "episode_id": "a7d4e9f0-1b2c-4d3e-8f5a-6b7c8d9e0f12",
+      "opened_in_day": true,
+      "probes": 5,
+      "first_probe_at": "2026-10-18T15:00:00Z",
+      "last_probe_at": "2026-10-18T23:59:59.999999Z",
+      "state_key": "bd2f3bf9bfb6c67f02330d78a20ca65b9cada3324004260e4218f8056806a11b",
+      "set_fingerprint": null,
+      "outcome": "non_402",
+      "reachable": true,
+      "protocol_status": "fail",
+      "opened_at": "2026-10-18T15:00:00Z",
+      "opted_out": false
+    },
+    {
+      "url": "https://pay.example/menu&tea/café",
+      "episode_id": "3f1c2b6e-8a9d-4c47-9b1e-0d2f4a6c8e01",
+      "opened_in_day": false,
+      "probes": 30,
+      "first_probe_at": "2026-10-18T08:00:12.000001+08:00",
+      "last_probe_at": "2026-10-18T14:59:30.5Z",
+      "state_key": "c73b6af0dd2d6e3bbbf2e513983243c41bf734cbf7c7bc9ee67d4e3123e5faaa",
+      "set_fingerprint": "956d8ea767b781c636f6406a19ac1203f36f9f039e996b96d93fd7158c6a8c57",
+      "outcome": "valid_requirements",
+      "reachable": true,
+      "protocol_status": "pass",
+      "opened_at": "2026-10-17T21:00:00.25Z",
+      "opted_out": false
+    }
+  ]
+}

@@ -33,6 +33,7 @@ Preflight は payment requirement と IFF の観測を比較し、支払いは�
 ## 含まれるもの
 
 - [`spec/x402-requirement-transparency-v1.md`](spec/x402-requirement-transparency-v1.md)：requirement fingerprint、signed tree head、Merkle 包含・整合性証明、公開フィールド、判定語彙を定義します。
+- [`spec/observed-confirmations-v1.md`](spec/observed-confirmations-v1.md)：observed tier の区間、UTC 日次文書、文書 leaf と共通の D8 鮮度規則を定義します。文書本体の構造は [JSON Schema](schemas/observed-confirmations-v1.json) で定義します。
 - [`spec/service-receipt-v1.md`](spec/service-receipt-v1.md)：canonical Service Receipt v1 の envelope、payload、domain、信頼モデル、有効期限の意味、証拠参照、API adapter の動作を定義します。
 - [`schemas/`](schemas/)：receipt envelope と receipt-key directory の JSON Schema です。
 - [`spec/testdata/`](spec/testdata/)：fingerprint、Merkle proof、完全な receipt 検証について、言語間で共有する既知の正解と拒否ケースを含みます。
@@ -40,6 +41,12 @@ Preflight は payment requirement と IFF の観測を比較し、支払いは�
 - [`ts/`](ts/)：`@ifandonlyif/x402-preflight` です。
 - [`go/`](go/)：IFF の非公開 production monitor が import する canonical Go fingerprint/preflight module です。標準ライブラリのみの [`receipt`](go/receipt/) package と、オフラインの [`iff-receipt-verify`](go/cmd/iff-receipt-verify/) コマンドも含みます。
 - [`browser/service-receipt.mjs`](browser/service-receipt.mjs)：DOM に依存しない Web Crypto receipt verifier core です。Node での適合性テストを備えます。
+
+## Observed tier の日次確認文書
+
+Observed endpoint の状態変化は署名付き観測として保存し、同じ結果は区間・日次カウンターへ加算できます。各 UTC 会計日の不変な文書は、専用 domain の `confirmation_document` leaf として同じ Merkle tree に入ります。`GET /api/v3/evidence/observed-confirmations/{day}`（または `/latest`）は本体、hash、サーバー報告の `sealed`／`logged`／`anchored` を返し、`/{day}/body` はハッシュ対象の元のバイト列を返します。
+
+この checkout の Python verifier は両方の leaf を扱い、最後の leaf が文書の場合も leaf hash で包含証明を取得します。Go／TypeScript ソースにも純粋な文書 leaf hash 関数がありますが、公開済みの `v0.2.0` パッケージには含まれません。共有ベクトルは state key、canonical 本体、文書 leaf を検査します。Schema だけではバイト順や合計値を証明できません。これは monitor の統計であり、すべての探測の実行、観測内容の真実性、現在の endpoint 状態、支払い成功を証明しません。承諾レベルや anchor は証明と信頼元を別途確認してください。
 
 ## 独立して検証する
 
@@ -123,6 +130,7 @@ API server、本番デプロイ設定と secrets、owner/auth state、秘密鍵�
 (cd go && go test ./...)
 (cd go && go vet ./...)
 (cd ts && npm ci && npm test && npm run build)
+node --test spec/observed-schema.test.mjs
 node --test browser/service-receipt.test.mjs
 python3 spec/verify_example.py --self-test
 python3 -m unittest discover -s spec -p 'test_*.py' -v
