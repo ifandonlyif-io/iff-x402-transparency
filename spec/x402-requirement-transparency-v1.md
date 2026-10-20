@@ -25,6 +25,12 @@ This specification covers:
   format for periodically checkpointing the log (§8).
 - The public HTTP API surface that exposes all of the above (§9).
 
+[Observed-tier Confirmations — v1](observed-confirmations-v1.md) extends this
+specification with observed-tier episodes, daily confirmation documents and
+a second leaf domain. Its §8–§9 define the observed card/comparison profile
+and the shared D8 freshness rule. Observation bytes, signatures, tree heads,
+and RFC 6962 proof algorithms below remain unchanged.
+
 It deliberately does **not** specify or imply:
 
 - That a payment made against an observed requirement will succeed, or is
@@ -159,7 +165,7 @@ words are the complete vocabulary; nothing in this system ever outputs a
 | `consistent` | Every option received matches an option observed within the freshness window. |
 | `diverged` | At least one received option does not match anything observed within the window. |
 | `unobserved` | No independent observation exists for this endpoint at all. |
-| `stale` | Observations exist, but the most recent one is older than the freshness window. |
+| `stale` | A valid confirmation exists, but it expired or a newer definitive result makes current requirements unavailable. |
 
 ### 2.1 Freshness window
 
@@ -183,7 +189,7 @@ tiers or per-tier configuration.
 The verdict vocabulary itself never changes: it is exactly the four words
 in the table above, always exactly one of them, never a fifth word and
 never `safe`/`unsafe`/a score. `stale` is a **freshness** statement about
-how old the most recent observation is — it is not, by itself, a
+the latest valid confirmation and definitive result — it is not, by itself, a
 statement about whether the received requirement still matches what was
 last seen. A stale endpoint's requirement is still compared against the
 last thing observed, and the response says separately whether that
@@ -197,18 +203,24 @@ fingerprintable observations recorded for the endpoint:
    `false`.
 2. Else if the endpoint record exists but has never produced a
    fingerprintable observation → `unobserved`, `known: true`.
-3. Else let `latest` be the most recent fingerprintable observation. If
-   `latest`'s timestamp is older than `window_seconds` (§2.1) before now,
+3. Else let T be the latest valid confirmation and U the latest definitive
+   probe time, using the shared D8 rule in the
+   [observed profile §9.1](observed-confirmations-v1.md#91-freshness-both-tiers).
+   A newer reachable result other than 403/429 can make U later than T;
+   unreachable/403/429 results never advance U. If U is later than T, or
+   T is older than `window_seconds` (§2.1) before now,
    the verdict is fixed to `stale`, and the comparison window used in the
-   next step is anchored at `latest`'s own timestamp —
-   `[latest_time - window_seconds, latest_time]` — **not** at "now": a
-   window ending at "now" would always be empty for an observation that
-   is, by definition, already older than `window_seconds`, and would say
-   nothing about whether the requirement still matches what was last
-   seen. Otherwise the verdict is not yet fixed, and the window is `[now -
+   next step is anchored at T —
+   `[T - window_seconds, T]`. This retains the last valid comparison when
+   a confirmation expires or current requirements become unavailable.
+   Otherwise the verdict is not yet fixed, and the window is `[now -
    window_seconds, now]` as in v0 of this rule.
 4. Let `ObservedOptionFPs` be the union of `option_fp` values across every
-   fingerprintable observation inside that window. `matches_last_observed`
+   fingerprintable observation inside that window for the verified tier.
+   For the observed tier, use eligible episodes and valid late results under
+   [the observed profile §9.2](observed-confirmations-v1.md#92-post-apiv3verify),
+   including its HTTP 503 rule for an unavailable comparison union.
+   `matches_last_observed`
    is `true` when every `option_fp` of every received option is a member
    of `ObservedOptionFPs`, `false` otherwise. If the verdict was not
    already fixed to `stale` in step 3, it is now decided:
@@ -347,15 +359,20 @@ report's own fields, confirming its SHA-256 digest equals the claimed
 ## 4. Transparency log
 
 The transparency log is a single, global, append-only Merkle tree (RFC
-6962 construction) over observation reports, shared across every endpoint
+6962 construction) over observation reports and observed daily confirmation
+documents, shared across every endpoint
 this system has ever observed. It is **not** partitioned per endpoint: an
 inclusion proof or a consistency proof is always relative to this one
 tree.
 
 ### 4.1 What gets sequenced
 
-Every `initial`, `scheduled`, and `discovery` observation is sequenced
-exactly once, in the order its underlying record was created, using a
+Every stored `initial`, `scheduled`, and `discovery` observation is sequenced
+exactly once. Under the observed profile, unchanged discovery probes may
+instead update episode/day counters; a sealed daily confirmation document
+is sequenced as one `confirmation_document` leaf when that profile is
+enabled. Observation and document leaves share the order their underlying
+records were created, using a
 strict `(created_at, id)` tiebreak so that the order is stable even when
 two observations share the same creation timestamp. `manual` observations
 are never sequenced. Sequencing assigns each entry a **dense, zero-based,
@@ -364,15 +381,19 @@ entry, entry 1 the second, and so on, with no gaps.
 
 ### 4.2 Leaf hashing
 
-A log entry's leaf is the raw 32 bytes of its observation's `report_hash`
+An observation log entry's leaf data is the raw 32 bytes of its `report_hash`
 (§3) — decode the hex string, do not re-hash the hex characters:
 
 ```
 leaf_hash(entry) = SHA-256( 0x00 || report_hash_bytes )
 ```
 
-`0x00` is a single leaf-domain-separation byte (RFC 6962 §2.1). This is
-the *only* place `0x00` is used as a prefix in this specification.
+`0x00` is a single leaf-domain-separation byte (RFC 6962 §2.1).
+A `confirmation_document` uses a different 62-byte leaf data:
+`UTF8("iff-observed-confirmations/v1\n") || document_hash_bytes`, still
+prefixed with `0x00` before SHA-256. See the
+[observed profile §5](observed-confirmations-v1.md#5-document-leaf).
+The observation formula above and all historical leaf hashes are unchanged.
 
 ### 4.3 Node hashing
 
@@ -737,12 +758,13 @@ Log entries in the half-open range `[start, end)`, ordered by `log_index`.
 {"start": 0, "end": 2, "entries": [ { "...": "one entry, shape below" } ]}
 ```
 
-Each entry:
+Each observation entry (`leaf_type` was absent in historical responses):
 
 ```json
 {
   "log_index": 0,
   "leaf_hash": "64-hex-chars",
+  "leaf_type": "observation",
   "observation_id": "uuid",
   "endpoint_id": "uuid",
   "endpoint_url": "https://api.example.com/v1/quote",
@@ -757,7 +779,7 @@ Each entry:
 }
 ```
 
-This is the complete, fixed field set — nothing else is ever present, and
+This is the fixed field set for an observation leaf, and
 `probe_type` is never `manual` (§3, §4.1). `set_fingerprint` is present as
 JSON `null`, never omitted, when the observation had no payment options to
 fingerprint (§1.3). `observed_at` here (and every other timestamp field
@@ -768,6 +790,25 @@ parse it as general RFC 3339, not assume a fixed width. Only §3's
 canonical report form fixes the exact six-digit format, and only because
 that exact byte sequence feeds a hash (`report_hash`) — a concern that
 does not apply to a plain API response field.
+
+For a `confirmation_document` leaf the public shape is instead:
+
+```json
+{
+  "log_index": 1,
+  "leaf_hash": "64-hex-chars",
+  "leaf_type": "confirmation_document",
+  "document": {"day": "2026-10-18", "document_hash": "64-hex-chars", "sealed_at": "2026-10-19T00:10:00Z"},
+  "set_fingerprint": null
+}
+```
+
+It has no observation or endpoint fields. Do not skip it during pagination
+or recompute it with the observation domain. Its body, hash, commitment
+metadata and public day/latest/body routes are specified in the
+[observed profile §7](observed-confirmations-v1.md#7-public-api).
+The [body schema](../schemas/observed-confirmations-v1.json) checks structure;
+canonical order, counters and hashes require the profile's separate checks.
 
 ### 9.4 `GET /api/v3/log/proof/inclusion?observation_id=<uuid>|leaf_hash=<hex>&tree_size=<n>`
 

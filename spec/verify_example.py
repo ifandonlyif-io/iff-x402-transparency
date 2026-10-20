@@ -10,7 +10,8 @@ commits to, and one inclusion proof, then independently verifies:
      ML-DSA-65, profile v2, see x402-signatures-ml-dsa-65.md Sec. 5). The
      algorithm is chosen only from the decoded public-key length: 32 bytes is
      Ed25519, 1952 bytes is ML-DSA-65, anything else is rejected.
-  4. Every entry's leaf_hash is SHA-256(0x00 || report_hash) (Sec. 4.2).
+  4. Every entry's leaf_hash follows its observation or confirmation-document
+     domain (Sec. 4.2 and observed-confirmations-v1 Sec. 5).
   5. The Merkle Tree Hash (Sec. 4.4) recomputed from all leaves equals the
      STH's root_hash.
   6. One inclusion proof verifies against that root_hash (Sec. 6.1).
@@ -145,6 +146,29 @@ def leaf_hash_from_report_hash(report_hash_hex: str) -> bytes:
     """spec Sec. 4.2: leaf_hash(entry) = SHA-256(0x00 || report_hash)."""
     report_hash = bytes.fromhex(report_hash_hex)
     return hashlib.sha256(b"\x00" + report_hash).digest()
+
+
+DOCUMENT_LEAF_DOMAIN = b"iff-observed-confirmations/v1\n"
+
+
+def leaf_hash_from_document_hash(document_hash_hex: str) -> bytes:
+    """Observed-confirmations v1 §5: hash the domain and 32 raw hash bytes."""
+    document_hash = _decode_hash(document_hash_hex, "document_hash")
+    return hashlib.sha256(b"\x00" + DOCUMENT_LEAF_DOMAIN + document_hash).digest()
+
+
+def leaf_hash_from_entry(entry: dict) -> bytes:
+    """Recompute either public leaf kind; absent leaf_type is historical v1."""
+    leaf_type = entry.get("leaf_type", "observation")
+    if leaf_type == "observation":
+        report_hash = _decode_hash(entry.get("report_hash"), "report_hash")
+        return hashlib.sha256(b"\x00" + report_hash).digest()
+    if leaf_type == "confirmation_document":
+        document = entry.get("document")
+        if not isinstance(document, dict):
+            raise ValueError("confirmation_document entry requires document metadata")
+        return leaf_hash_from_document_hash(document.get("document_hash"))
+    raise ValueError(f"unsupported leaf_type: {leaf_type!r}")
 
 
 def node_hash(left: bytes, right: bytes) -> bytes:
@@ -415,9 +439,12 @@ def _decode_hash(value: object, field_name: str) -> bytes:
     if not isinstance(value, str) or len(value) != 64 or value.lower() != value:
         raise ValueError(f"{field_name} must be 64 lowercase hex characters")
     try:
-        return bytes.fromhex(value)
+        decoded = bytes.fromhex(value)
     except ValueError as exc:
         raise ValueError(f"{field_name} must be 64 lowercase hex characters") from exc
+    if len(decoded) != 32:
+        raise ValueError(f"{field_name} must be 64 lowercase hex characters")
+    return decoded
 
 
 STH_V2_DOMAIN = b"iff-x402-tree-head/v2\n"
@@ -826,14 +853,14 @@ def run_against_api(
     leaves: list[bytes] = []
     for index in range(tree_size):
         entry = entries_by_index[index]
-        leaf = leaf_hash_from_report_hash(entry["report_hash"])
+        leaf = leaf_hash_from_entry(entry)
         if leaf.hex() != entry["leaf_hash"]:
             raise ValueError(
                 f"leaf_hash mismatch at log_index {index}: "
                 f"recomputed {leaf.hex()}, entry claims {entry['leaf_hash']}"
             )
         leaves.append(leaf)
-    print(f"  [OK] recomputed leaf_hash for all {tree_size} entries from report_hash")
+    print(f"  [OK] recomputed leaf_hash for all {tree_size} entries in their leaf domains")
 
     computed_root = merkle_tree_hash(leaves)
     if computed_root != root_hash:
@@ -847,10 +874,12 @@ def run_against_api(
     target_entry = entries_by_index[target_index]
     proof_url = (
         f"{base_url}/api/v3/log/proof/inclusion"
-        f"?observation_id={target_entry['observation_id']}&tree_size={tree_size}"
+        f"?leaf_hash={target_entry['leaf_hash']}&tree_size={tree_size}"
     )
     print(f"GET {proof_url}")
     proof = http_get_json(proof_url)
+    if proof.get("log_index") != target_index or proof.get("tree_size") != tree_size:
+        raise ValueError("inclusion response does not match the requested index and tree_size")
     audit_path = [bytes.fromhex(h) for h in proof["audit_path"]]
     ok = verify_inclusion(
         leaves[target_index], proof["log_index"], proof["tree_size"], audit_path, root_hash
@@ -859,7 +888,7 @@ def run_against_api(
         raise ValueError(f"inclusion proof failed to verify for log_index={target_index}")
     print(
         f"  [OK] inclusion proof verifies for log_index={target_index} "
-        f"(observation_id={target_entry['observation_id']}) against tree_size={tree_size}"
+        f"(leaf_type={target_entry.get('leaf_type', 'observation')}) against tree_size={tree_size}"
     )
 
     print()

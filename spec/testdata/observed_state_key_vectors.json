@@ -1,0 +1,138 @@
+{
+  "algorithm": "iff-observed-state-key/v1",
+  "note": "Test-only ML-DSA-65 public key generated with `go run ./cmd/iff-signing-keygen -out FILE` for these vectors; it is not a production monitor key and its seed was discarded. Expected values were computed independently of the Go implementation.",
+  "monitor_public_key": "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",
+  "monitor_key_id": "sha256:5cabb48d37686b4b2040c0b3686d3b9fe330839c814397fa7a9edc0af5bd7682",
+  "vectors": [
+    {
+      "name": "402 valid requirements",
+      "input": {
+        "check_codes": [
+          "http_402_observed",
+          "x402_v2_valid"
+        ],
+        "error_code": "",
+        "protocol_status": "pass",
+        "reachable": true,
+        "set_fingerprint": "2511730e1df5e380ebe9dee93102e37c64aaf8d1f8f860ff5765dadf5726936a",
+        "status_code": 402,
+        "x402_version": 2
+      },
+      "canonical": "{\"check_codes\":[\"http_402_observed\",\"x402_v2_valid\"],\"error_code\":null,\"monitor_key_id\":\"sha256:5cabb48d37686b4b2040c0b3686d3b9fe330839c814397fa7a9edc0af5bd7682\",\"protocol_status\":\"pass\",\"reachable\":true,\"set_fingerprint\":\"2511730e1df5e380ebe9dee93102e37c64aaf8d1f8f860ff5765dadf5726936a\",\"status_code\":402,\"x402_version\":2}",
+      "state_key": "b21a7ea586e6f9fabca0ce31e625cd1efb875f0f0731a40c72d17a361ff45101"
+    },
+    {
+      "name": "402 valid requirements, check_codes reordered",
+      "input": {
+        "check_codes": [
+          "x402_v2_valid",
+          "http_402_observed"
+        ],
+        "error_code": "",
+        "protocol_status": "pass",
+        "reachable": true,
+        "set_fingerprint": "2511730e1df5e380ebe9dee93102e37c64aaf8d1f8f860ff5765dadf5726936a",
+        "status_code": 402,
+        "x402_version": 2
+      },
+      "canonical": "{\"check_codes\":[\"http_402_observed\",\"x402_v2_valid\"],\"error_code\":null,\"monitor_key_id\":\"sha256:5cabb48d37686b4b2040c0b3686d3b9fe330839c814397fa7a9edc0af5bd7682\",\"protocol_status\":\"pass\",\"reachable\":true,\"set_fingerprint\":\"2511730e1df5e380ebe9dee93102e37c64aaf8d1f8f860ff5765dadf5726936a\",\"status_code\":402,\"x402_version\":2}",
+      "state_key": "b21a7ea586e6f9fabca0ce31e625cd1efb875f0f0731a40c72d17a361ff45101",
+      "same_state_as": "402 valid requirements"
+    },
+    {
+      "name": "402 invalid requirements",
+      "input": {
+        "check_codes": [
+          "http_402_observed",
+          "invalid_payment_required"
+        ],
+        "error_code": "invalid_payment_required",
+        "protocol_status": "fail",
+        "reachable": true,
+        "set_fingerprint": "",
+        "status_code": 402,
+        "x402_version": null
+      },
+      "canonical": "{\"check_codes\":[\"http_402_observed\",\"invalid_payment_required\"],\"error_code\":\"invalid_payment_required\",\"monitor_key_id\":\"sha256:5cabb48d37686b4b2040c0b3686d3b9fe330839c814397fa7a9edc0af5bd7682\",\"protocol_status\":\"fail\",\"reachable\":true,\"set_fingerprint\":null,\"status_code\":402,\"x402_version\":null}",
+      "state_key": "9abdc622cc7d9a532fa89312feee3d653f760390e8cd099230bcde9dae6dabcd"
+    },
+    {
+      "name": "200 non-402",
+      "input": {
+        "check_codes": [
+          "unexpected_http_status"
+        ],
+        "error_code": "unexpected_http_status",
+        "protocol_status": "fail",
+        "reachable": true,
+        "set_fingerprint": "",
+        "status_code": 200,
+        "x402_version": null
+      },
+      "canonical": "{\"check_codes\":[\"unexpected_http_status\"],\"error_code\":\"unexpected_http_status\",\"monitor_key_id\":\"sha256:5cabb48d37686b4b2040c0b3686d3b9fe330839c814397fa7a9edc0af5bd7682\",\"protocol_status\":\"fail\",\"reachable\":true,\"set_fingerprint\":null,\"status_code\":200,\"x402_version\":null}",
+      "state_key": "05011010105057dee1370a5fff441e8d26195a6930e10bd19e0593f314ef0a9b"
+    },
+    {
+      "name": "403 no information",
+      "input": {
+        "check_codes": [
+          "unexpected_http_status"
+        ],
+        "error_code": "unexpected_http_status",
+        "protocol_status": "fail",
+        "reachable": true,
+        "set_fingerprint": "",
+        "status_code": 403,
+        "x402_version": null
+      },
+      "canonical": "{\"check_codes\":[\"unexpected_http_status\"],\"error_code\":\"unexpected_http_status\",\"monitor_key_id\":\"sha256:5cabb48d37686b4b2040c0b3686d3b9fe330839c814397fa7a9edc0af5bd7682\",\"protocol_status\":\"fail\",\"reachable\":true,\"set_fingerprint\":null,\"status_code\":403,\"x402_version\":null}",
+      "state_key": "09d9ab6542bd6580b13dd2353fb99473a769c84779617018c1caea58d03c1f4a"
+    },
+    {
+      "name": "429 no information",
+      "input": {
+        "check_codes": [
+          "unexpected_http_status"
+        ],
+        "error_code": "unexpected_http_status",
+        "protocol_status": "fail",
+        "reachable": true,
+        "set_fingerprint": "",
+        "status_code": 429,
+        "x402_version": null
+      },
+      "canonical": "{\"check_codes\":[\"unexpected_http_status\"],\"error_code\":\"unexpected_http_status\",\"monitor_key_id\":\"sha256:5cabb48d37686b4b2040c0b3686d3b9fe330839c814397fa7a9edc0af5bd7682\",\"protocol_status\":\"fail\",\"reachable\":true,\"set_fingerprint\":null,\"status_code\":429,\"x402_version\":null}",
+      "state_key": "b8ec2c8e54d393780befe469c20b73170bdefb20651af14fa0433ce63d7b173c"
+    },
+    {
+      "name": "DNS failure, unreachable",
+      "input": {
+        "check_codes": [
+          "network_error"
+        ],
+        "error_code": "network_error",
+        "protocol_status": "unknown",
+        "reachable": false,
+        "set_fingerprint": "",
+        "status_code": 0,
+        "x402_version": null
+      },
+      "canonical": "{\"check_codes\":[\"network_error\"],\"error_code\":\"network_error\",\"monitor_key_id\":\"sha256:5cabb48d37686b4b2040c0b3686d3b9fe330839c814397fa7a9edc0af5bd7682\",\"protocol_status\":\"unknown\",\"reachable\":false,\"set_fingerprint\":null,\"status_code\":null,\"x402_version\":null}",
+      "state_key": "52545311280c7e8ab07cb20e43bbbf6049ce9e783de405431585343905167b44"
+    },
+    {
+      "name": "no check codes",
+      "input": {
+        "check_codes": [],
+        "error_code": "",
+        "protocol_status": "unknown",
+        "reachable": false,
+        "set_fingerprint": "",
+        "status_code": 0,
+        "x402_version": null
+      },
+      "canonical": "{\"check_codes\":[],\"error_code\":null,\"monitor_key_id\":\"sha256:5cabb48d37686b4b2040c0b3686d3b9fe330839c814397fa7a9edc0af5bd7682\",\"protocol_status\":\"unknown\",\"reachable\":false,\"set_fingerprint\":null,\"status_code\":null,\"x402_version\":null}",
+      "state_key": "641d8287bdc33af71f6a9cceb9dc081951fa7ba0ef89c8e44ba1871d8f95b2f9"
+    }
+  ]
+}

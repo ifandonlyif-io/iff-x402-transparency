@@ -8,12 +8,14 @@ Before opening a pull request, run:
 (cd go && go test ./...)
 (cd go && go vet ./...)
 (cd ts && npm ci && npm test && npm run build)
+node --test spec/observed-schema.test.mjs
 node --test browser/service-receipt.test.mjs
 python3 spec/verify_example.py --self-test
 python3 -m unittest discover -s spec -p 'test_*.py' -v
 python3 -m json.tool schemas/service-receipt-v1.json >/dev/null
 python3 -m json.tool schemas/service-receipt-key-directory-v1.json >/dev/null
 python3 -m json.tool spec/testdata/service_receipt_v1.json >/dev/null
+python3 -m json.tool schemas/observed-confirmations-v1.json >/dev/null
 ```
 
 Changes to canonicalization, hashing, proof verification, or wire fields must

@@ -39,6 +39,9 @@ type ObservedSummary struct {
 	MonitorPublicKey   string    `json:"monitor_public_key"`
 	ReportHash         string    `json:"report_hash"`
 	MonitorSignature   string    `json:"monitor_signature"`
+	// LastConfirmedAt is the latest effective confirmation of this episode
+	// under observed-confirmation-window/v1; ObservedAt remains its opening.
+	LastConfirmedAt *time.Time `json:"last_confirmed_at,omitempty"`
 }
 
 // RequirementHistoryEntry is one run in C4's "history" array.
@@ -67,10 +70,12 @@ type InclusionSTH struct {
 	PublicKey string    `json:"public_key"`
 }
 
-// Inclusion proves the newest observation for this endpoint covered by the
-// latest signed tree head. ObservationID may differ from Result.Observed;
-// ObservationID, ObservedAt, and LeafHash are optional for compatibility
-// with servers deployed before those covered-observation fields were added.
+// Inclusion proves an observation covered by the embedded signed tree head.
+// Under observed-confirmation-window/v1 it must name Result.Observed's exact
+// episode opening; no older opening or repeat confirmation substitutes for it.
+// Under observation-window/v1 (verified tier), it may name an older covered
+// observation than Result.Observed. ObservationID, ObservedAt, and LeafHash are
+// optional for compatibility with older servers.
 type Inclusion struct {
 	ObservationID *string      `json:"observation_id,omitempty"`
 	ObservedAt    *time.Time   `json:"observed_at,omitempty"`
@@ -108,7 +113,17 @@ type Result struct {
 	// endpoint row exists but has never produced a fingerprint observation,
 	// false when the URL has never been seen as an endpoint at all.
 	Known *bool `json:"known,omitempty"`
-	// Inclusion is nil until this endpoint has an observation covered by an STH.
+	// ComparisonPolicy identifies observation-window/v1 or
+	// observed-confirmation-window/v1. These freshness fields are optional for
+	// compatibility with responses from before the observed profile.
+	ComparisonPolicy   string     `json:"comparison_policy,omitempty"`
+	FreshnessReason    string     `json:"freshness_reason,omitempty"`
+	LastConfirmedAt    *time.Time `json:"last_confirmed_at,omitempty"`
+	LastAttemptAt      *time.Time `json:"last_attempt_at,omitempty"`
+	LastAttemptOutcome string     `json:"last_attempt_outcome,omitempty"`
+	// Inclusion is nil until a signed tree head covers eligible evidence.
+	// The observed profile requires the exact episode opening named by
+	// Observed; the verified profile may use an older covered observation.
 	Inclusion  *Inclusion `json:"inclusion"`
 	Disclaimer string     `json:"disclaimer"`
 }

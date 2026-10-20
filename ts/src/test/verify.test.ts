@@ -8,6 +8,7 @@ import {
   verifyAccepts,
   type FetchLike,
   type VerifyInclusion,
+  type VerifyObservedSummary,
   type VerifyResult,
 } from "../verify.js";
 
@@ -135,4 +136,64 @@ test("VerifyInclusion remains compatible when identity fields are absent", () =>
   assert.equal(inclusion.observation_id, undefined);
   assert.equal(inclusion.observed_at, undefined);
   assert.equal(inclusion.leaf_hash, undefined);
+});
+
+test("verify decodes observed freshness fields while retaining the episode opening", async () => {
+  const observed: VerifyObservedSummary = {
+    set_fingerprint: "a".repeat(64), option_fingerprints: ["a".repeat(64)],
+    observation_id: "11111111-1111-4111-8111-111111111111", observed_at: "2026-10-01T10:00:00Z",
+    probe_type: "discovery", monitor_id: "monitor", monitor_public_key: "key",
+    report_hash: "b".repeat(64), monitor_signature: "signature", last_confirmed_at: "2026-10-01T11:00:00Z",
+  };
+  const response: VerifyResult = {
+    ...baseVerifyResult(), tier: "observed", verdict: "stale", observed,
+    comparison_policy: "observed-confirmation-window/v1", freshness_reason: "current_requirements_unavailable",
+    last_confirmed_at: "2026-10-01T11:00:00Z", last_attempt_at: "2026-10-01T11:05:00Z", last_attempt_outcome: "non_402",
+    inclusion: null,
+  };
+  const fetchImpl: FetchLike = (async () => new Response(JSON.stringify(response), { status: 200 })) as FetchLike;
+  const result = await verify("https://example.com/paid", { x402Version: 2, accepts: [] }, { fetch: fetchImpl });
+  assert.equal(result.comparison_policy, "observed-confirmation-window/v1");
+  assert.equal(result.freshness_reason, "current_requirements_unavailable");
+  assert.equal(result.last_confirmed_at, "2026-10-01T11:00:00Z");
+  assert.equal(result.last_attempt_at, "2026-10-01T11:05:00Z");
+  assert.equal(result.last_attempt_outcome, "non_402");
+  assert.equal(result.observed?.last_confirmed_at, "2026-10-01T11:00:00Z");
+  assert.equal(result.observed?.observed_at, "2026-10-01T10:00:00Z");
+  assert.equal(result.inclusion, null);
+});
+
+test("verify retains profile-specific inclusion identity and legacy field omission", async () => {
+  const openingID = "11111111-1111-4111-8111-111111111111";
+  const olderID = "22222222-2222-4222-8222-222222222222";
+  for (const profile of [
+    { tier: "observed", policy: "observed-confirmation-window/v1", inclusionID: openingID },
+    { tier: "verified", policy: "observation-window/v1", inclusionID: olderID },
+    { tier: undefined, policy: undefined, inclusionID: undefined },
+  ]) {
+    const response: VerifyResult = {
+      ...baseVerifyResult(), tier: profile.tier, comparison_policy: profile.policy,
+      observed: {
+        set_fingerprint: "a".repeat(64), option_fingerprints: ["a".repeat(64)], observation_id: openingID,
+        observed_at: "2026-10-01T10:00:00Z", probe_type: "discovery", monitor_id: "monitor",
+        monitor_public_key: "key", report_hash: "b".repeat(64), monitor_signature: "signature",
+      },
+      inclusion: profile.inclusionID === undefined ? null : {
+        observation_id: profile.inclusionID,
+        observed_at: profile.inclusionID === openingID ? "2026-10-01T10:00:00Z" : "2026-10-01T09:00:00Z",
+        leaf_hash: "d".repeat(64), tree_size: 1, log_index: 0, audit_path: [],
+        sth: { log_id: "log", tree_size: 1, timestamp: "2026-10-01T12:00:00Z", root_hash: "d".repeat(64), signature: "sig", public_key: "key" },
+      },
+    };
+    const fetchImpl: FetchLike = (async () => new Response(JSON.stringify(response), { status: 200 })) as FetchLike;
+    const result = await verifyAccepts("https://example.com/paid", [], { fetch: fetchImpl });
+    assert.equal(result.comparison_policy, profile.policy);
+    assert.equal(result.observed?.observation_id, openingID);
+    assert.equal(result.inclusion?.observation_id, profile.inclusionID);
+    assert.equal(result.freshness_reason, undefined);
+    assert.equal(result.last_confirmed_at, undefined);
+    assert.equal(result.last_attempt_at, undefined);
+    assert.equal(result.last_attempt_outcome, undefined);
+    assert.equal(result.observed?.last_confirmed_at, undefined);
+  }
 });

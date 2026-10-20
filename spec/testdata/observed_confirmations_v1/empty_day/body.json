@@ -1,0 +1,1 @@
+{"schema":"iff-observed-confirmations/v1","day":"2026-10-18","monitor_id":"iff-monitor-test","state_key_algorithm":"iff-observed-state-key/v1","fingerprint_version":1,"sealed_at":"2026-10-19T00:10:00.123456Z","endpoint_count":0,"omitted_opted_out_endpoints":0,"uncounted_late_results":0,"totals":{"probes":0,"valid_confirmations":0,"transitions":0},"entries":[]}

@@ -7,6 +7,8 @@ export {
   type PaymentOption,
 } from "./fingerprint.js";
 
+export { documentLeafHash, DOCUMENT_LEAF_DOMAIN } from "./documentLeaf.js";
+
 export {
   verify,
   verifyAccepts,

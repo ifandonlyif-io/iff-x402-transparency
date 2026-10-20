@@ -1,0 +1,8 @@
+{
+  "description": "A UTC accounting day with no observed_daily_confirmations rows is still sealed, with empty entries. sealed_at carries nanoseconds to pin the microsecond truncation.",
+  "day": "2026-10-18",
+  "sealed_at": "2026-10-19T00:10:00.123456789Z",
+  "monitor_id": "iff-monitor-test",
+  "uncounted_late_results": 0,
+  "rows": []
+}

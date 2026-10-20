@@ -33,6 +33,7 @@ Preflight 比较付款要求与 IFF 的观测，不执行付款。调用者保�
 ## 仓库内容
 
 - [`spec/x402-requirement-transparency-v1.md`](spec/x402-requirement-transparency-v1.md)：定义 requirement fingerprint、signed tree head、Merkle 包含与一致性证明、公开字段及判定词汇。
+- [`spec/observed-confirmations-v1.md`](spec/observed-confirmations-v1.md)：定义 observed tier 区段、UTC 每日文档、文档 leaf 与共用 D8 新鲜度；文档正文结构另由 [JSON Schema](schemas/observed-confirmations-v1.json) 定义。
 - [`spec/service-receipt-v1.md`](spec/service-receipt-v1.md)：定义 canonical Service Receipt v1 的 envelope、payload、domain、信任模型、有效期限语义、证据引用及 API adapter 行为。
 - [`schemas/`](schemas/)：receipt envelope 与 receipt-key directory 的 JSON Schema。
 - [`spec/testdata/`](spec/testdata/)：fingerprint、Merkle proof 与完整收据验证的跨语言已知答案向量，含拒绝案例。
@@ -40,6 +41,12 @@ Preflight 比较付款要求与 IFF 的观测，不执行付款。调用者保�
 - [`ts/`](ts/)：`@ifandonlyif/x402-preflight`。
 - [`go/`](go/)：IFF 私有生产监测器导入的 canonical Go fingerprint/preflight 模块。也包含仅依赖标准库的 [`receipt`](go/receipt/) 软件包与离线 [`iff-receipt-verify`](go/cmd/iff-receipt-verify/) 命令。
 - [`browser/service-receipt.mjs`](browser/service-receipt.mjs)：不依赖 DOM、使用 Web Crypto 的收据验证核心，附 Node 兼容性测试。
+
+## Observed tier 每日确认文档
+
+Observed endpoint 的状态变化保留签署观测，相同结果则累加区段与每日计数；每个 UTC 记账日的不可变文档，以独立 domain 的 `confirmation_document` leaf 进入同一棵 Merkle tree。`GET /api/v3/evidence/observed-confirmations/{day}`（或 `/latest`）提供正文、hash 与服务器报告的 `sealed`／`logged`／`anchored` 等级，`/{day}/body` 提供应直接哈希的原始字节。
+
+本 checkout 的 Python 验证器支持两种 leaf，并以 leaf hash 查询包含证明，包括最后一叶是文档的情况。Go／TypeScript 源码另提供纯文档 leaf hash 函数；既有 `v0.2.0` 发布包尚未包含。共享向量检查 state key、canonical 正文与文档 leaf；schema 本身不证明字节顺序或计数总和。这些是 monitor 的统计，不证明每次探测均执行、观测真实性、endpoint 当前状态或付款成功；承诺与锚定信息仍须另查证明与信任来源。
 
 ## 独立验证
 
@@ -123,6 +130,7 @@ Issuer 与完整 key ID 必须一起使用。日期文件是通过此受保护 r
 (cd go && go test ./...)
 (cd go && go vet ./...)
 (cd ts && npm ci && npm test && npm run build)
+node --test spec/observed-schema.test.mjs
 node --test browser/service-receipt.test.mjs
 python3 spec/verify_example.py --self-test
 python3 -m unittest discover -s spec -p 'test_*.py' -v
